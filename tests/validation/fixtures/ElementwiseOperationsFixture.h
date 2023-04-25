@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,6 +26,7 @@
 
 #include "arm_compute/core/TensorShape.h"
 #include "arm_compute/core/Types.h"
+#include "arm_compute/core/Validate.h"
 #include "tests/AssetsLibrary.h"
 #include "tests/Globals.h"
 #include "tests/IAccessor.h"
@@ -48,9 +49,12 @@ public:
     template <typename...>
     void setup(ArithmeticOperation op, const TensorShape &shape0, const TensorShape &shape1,
                DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace = false, bool use_dynamic_shape = false)
     {
-        _op        = op;
+        _op                = op;
+        _use_dynamic_shape = use_dynamic_shape;
+        _is_inplace        = is_inplace;
+
         _target    = compute_target(shape0, shape1, data_type0, data_type1, output_data_type, qinfo0, qinfo1, qinfo_out);
         _reference = compute_reference(shape0, shape1, data_type0, data_type1, output_data_type, qinfo0, qinfo1, qinfo_out);
     }
@@ -83,26 +87,67 @@ protected:
                               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
     {
         // Create tensors
-        TensorType ref_src1 = create_tensor<TensorType>(shape0, data_type0, 1, qinfo0);
-        TensorType ref_src2 = create_tensor<TensorType>(shape1, data_type1, 1, qinfo1);
-        TensorType dst      = create_tensor<TensorType>(TensorShape::broadcast_shape(shape0, shape1), output_data_type, 1, qinfo_out);
+        const TensorShape out_shape = TensorShape::broadcast_shape(shape0, shape1);
+        TensorType        ref_src1  = create_tensor<TensorType>(shape0, data_type0, 1, qinfo0);
+        TensorType        ref_src2  = create_tensor<TensorType>(shape1, data_type1, 1, qinfo1);
+        TensorType        dst       = create_tensor<TensorType>(out_shape, output_data_type, 1, qinfo_out);
+
+        // Check whether do in-place computation and whether inputs are broadcast compatible
+        TensorType *actual_dst = &dst;
+        if(_is_inplace)
+        {
+            bool src1_is_inplace = !arm_compute::detail::have_different_dimensions(out_shape, shape0, 0) && (qinfo0 == qinfo_out) && (data_type0 == output_data_type);
+            bool src2_is_inplace = !arm_compute::detail::have_different_dimensions(out_shape, shape1, 0) && (qinfo1 == qinfo_out) && (data_type1 == output_data_type);
+            bool do_in_place     = out_shape.total_size() != 0 && (src1_is_inplace || src2_is_inplace);
+            ARM_COMPUTE_ASSERT(do_in_place);
+
+            if(src1_is_inplace)
+            {
+                actual_dst = &ref_src1;
+            }
+            else
+            {
+                actual_dst = &ref_src2;
+            }
+        }
+
+        // if _use_dynamic_shape is true, this fixture will test scenario for dynamic shapes.
+        // - At configure time, all input tensors are marked as dynamic using set_tensor_dynamic()
+        // - After configure, tensors are marked as static for run using set_tensor_static()
+        // - The tensors with static shape are given to run()
+        if(_use_dynamic_shape)
+        {
+            set_tensor_dynamic(ref_src1);
+            set_tensor_dynamic(ref_src2);
+        }
 
         // Create and configure function
         FunctionType elem_op;
-        elem_op.configure(&ref_src1, &ref_src2, &dst);
+        elem_op.configure(&ref_src1, &ref_src2, actual_dst);
 
-        ARM_COMPUTE_EXPECT(ref_src1.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(ref_src2.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        if(_use_dynamic_shape)
+        {
+            set_tensor_static(ref_src1);
+            set_tensor_static(ref_src2);
+        }
+
+        ARM_COMPUTE_ASSERT(ref_src1.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(ref_src2.info()->is_resizable());
 
         // Allocate tensors
         ref_src1.allocator()->allocate();
         ref_src2.allocator()->allocate();
-        dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!ref_src1.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!ref_src2.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        // If don't do in-place computation, still need to allocate original dst
+        if(!_is_inplace)
+        {
+            ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+            dst.allocator()->allocate();
+            ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        }
+
+        ARM_COMPUTE_ASSERT(!ref_src1.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!ref_src2.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(ref_src1), 0);
@@ -111,7 +156,7 @@ protected:
         // Compute function
         elem_op.run();
 
-        return dst;
+        return std::move(*actual_dst);
     }
 
     SimpleTensor<T> compute_reference(const TensorShape &shape0, const TensorShape &shape1,
@@ -133,6 +178,8 @@ protected:
     TensorType          _target{};
     SimpleTensor<T>     _reference{};
     ArithmeticOperation _op{ ArithmeticOperation::ADD };
+    bool                _use_dynamic_shape{ false };
+    bool                _is_inplace{ false };
 };
 
 // Arithmetic operation fused with activation function
@@ -143,12 +190,13 @@ public:
     template <typename...>
     void setup(ArithmeticOperation op, const TensorShape &shape0, const TensorShape &shape1,
                DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, ActivationLayerInfo act_info)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, ActivationLayerInfo act_info, bool is_inplace = true)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(op, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
-        _act_info = act_info;
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
+        _act_info   = act_info;
+        _is_inplace = is_inplace;
     }
 
 protected:
@@ -156,26 +204,51 @@ protected:
                               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
     {
         // Create tensors
-        TensorType ref_src1 = create_tensor<TensorType>(shape0, data_type0, 1, qinfo0);
-        TensorType ref_src2 = create_tensor<TensorType>(shape1, data_type1, 1, qinfo1);
-        TensorType dst      = create_tensor<TensorType>(TensorShape::broadcast_shape(shape0, shape1), output_data_type, 1, qinfo_out);
+        const TensorShape out_shape = TensorShape::broadcast_shape(shape0, shape1);
+        TensorType        ref_src1  = create_tensor<TensorType>(shape0, data_type0, 1, qinfo0);
+        TensorType        ref_src2  = create_tensor<TensorType>(shape1, data_type1, 1, qinfo1);
+        TensorType        dst       = create_tensor<TensorType>(out_shape, output_data_type, 1, qinfo_out);
+
+        // Check whether do in-place computation and whether inputs are broadcast compatible
+        TensorType *actual_dst = &dst;
+        if(_is_inplace)
+        {
+            bool src1_is_inplace = !arm_compute::detail::have_different_dimensions(out_shape, shape0, 0) && (qinfo0 == qinfo_out) && (data_type0 == output_data_type);
+            bool src2_is_inplace = !arm_compute::detail::have_different_dimensions(out_shape, shape1, 0) && (qinfo1 == qinfo_out) && (data_type1 == output_data_type);
+            bool do_in_place     = out_shape.total_size() != 0 && (src1_is_inplace || src2_is_inplace);
+            ARM_COMPUTE_ASSERT(do_in_place);
+
+            if(src1_is_inplace)
+            {
+                actual_dst = &ref_src1;
+            }
+            else
+            {
+                actual_dst = &ref_src2;
+            }
+        }
 
         // Create and configure function
         FunctionType elem_op;
-        elem_op.configure(&ref_src1, &ref_src2, &dst, _act_info);
+        elem_op.configure(&ref_src1, &ref_src2, actual_dst, _act_info);
 
-        ARM_COMPUTE_EXPECT(ref_src1.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(ref_src2.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(ref_src1.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(ref_src2.info()->is_resizable());
 
         // Allocate tensors
         ref_src1.allocator()->allocate();
         ref_src2.allocator()->allocate();
-        dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!ref_src1.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!ref_src2.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        // If don't do in-place computation, still need to allocate original dst
+        if(!_is_inplace)
+        {
+            ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+            dst.allocator()->allocate();
+            ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        }
+
+        ARM_COMPUTE_ASSERT(!ref_src1.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!ref_src2.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(ref_src1), 0);
@@ -184,7 +257,7 @@ protected:
         // Compute function
         elem_op.run();
 
-        return dst;
+        return std::move(*actual_dst);
     }
 
     SimpleTensor<T> compute_reference(const TensorShape &shape0, const TensorShape &shape1,
@@ -197,6 +270,7 @@ protected:
     }
 
     ActivationLayerInfo _act_info{};
+    bool                _is_inplace{ false };
 };
 
 template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
@@ -204,11 +278,11 @@ class ArithmeticDivisionBroadcastValidationFixture : public ArithmeticOperations
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -217,11 +291,37 @@ class ArithmeticDivisionValidationFixture : public ArithmeticOperationsGenericFi
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
+    }
+};
+
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+class ArithmeticDivisionBroadcastDynamicShapeValidationFixture : public ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>
+{
+public:
+    template <typename...>
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
+    {
+        ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape0, shape1,
+                                                                                             data_type0, data_type1, output_data_type,
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace, true);
+    }
+};
+
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+class ArithmeticDivisionDynamicShapeValidationFixture : public ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>
+{
+public:
+    template <typename...>
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
+    {
+        ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape, shape,
+                                                                                             data_type0, data_type1, output_data_type,
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -230,11 +330,11 @@ class ArithmeticDivisionBroadcastValidationFloatFixture : public ArithmeticOpera
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape0, shape1,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -243,11 +343,24 @@ class ArithmeticDivisionValidationFloatFixture : public ArithmeticOperationsFuse
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape, shape,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
+    }
+};
+
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+class ArithmeticDivisionValidationIntegerFixture : public ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>
+{
+public:
+    template <typename...>
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
+    {
+        ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape, shape,
+                                                                                                    data_type0, data_type1, output_data_type,
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -257,12 +370,12 @@ class ArithmeticDivisionValidationQuantizedFixture : public ArithmeticOperations
 public:
     template <typename...>
     void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::DIV, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -271,11 +384,11 @@ class ElementwiseMaxBroadcastValidationFixture : public ArithmeticOperationsGene
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -284,11 +397,11 @@ class ElementwiseMaxValidationFixture : public ArithmeticOperationsGenericFixtur
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -297,11 +410,11 @@ class ElementwiseMaxBroadcastValidationFloatFixture : public ArithmeticOperation
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape0, shape1,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -310,11 +423,11 @@ class ElementwiseMaxValidationFloatFixture : public ArithmeticOperationsFuseActi
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape, shape,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -324,12 +437,12 @@ class ElementwiseMaxValidationQuantizedFixture : public ArithmeticOperationsGene
 public:
     template <typename...>
     void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -339,12 +452,12 @@ class ElementwiseMaxQuantizedBroadcastValidationFixture : public ArithmeticOpera
 public:
     template <typename...>
     void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MAX, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -353,11 +466,11 @@ class ElementwiseMinBroadcastValidationFixture : public ArithmeticOperationsGene
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -366,11 +479,11 @@ class ElementwiseMinValidationFixture : public ArithmeticOperationsGenericFixtur
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -379,11 +492,11 @@ class ElementwiseMinBroadcastValidationFloatFixture : public ArithmeticOperation
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape0, shape1,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -392,11 +505,11 @@ class ElementwiseMinValidationFloatFixture : public ArithmeticOperationsFuseActi
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape, shape,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -406,12 +519,12 @@ class ElementwiseMinValidationQuantizedFixture : public ArithmeticOperationsGene
 public:
     template <typename...>
     void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -421,12 +534,12 @@ class ElementwiseMinQuantizedBroadcastValidationFixture : public ArithmeticOpera
 public:
     template <typename...>
     void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::MIN, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -435,11 +548,11 @@ class ElementwiseSquaredDiffBroadcastValidationFixture : public ArithmeticOperat
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -448,11 +561,11 @@ class ElementwiseSquaredDiffValidationFixture : public ArithmeticOperationsGener
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -461,11 +574,11 @@ class ElementwiseSquaredDiffBroadcastValidationFloatFixture : public ArithmeticO
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape0, shape1,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -474,11 +587,11 @@ class ElementwiseSquaredDiffValidationFloatFixture : public ArithmeticOperations
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape, shape,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -488,12 +601,12 @@ class ElementwiseSquaredDiffValidationQuantizedFixture : public ArithmeticOperat
 public:
     template <typename...>
     void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -503,12 +616,12 @@ class ElementwiseSquaredDiffQuantizedBroadcastValidationFixture : public Arithme
 public:
     template <typename...>
     void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type,
-               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out)
+               QuantizationInfo qinfo0, QuantizationInfo qinfo1, QuantizationInfo qinfo_out, bool is_inplace)
 
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::SQUARED_DIFF, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             qinfo0, qinfo1, qinfo_out);
+                                                                                             qinfo0, qinfo1, qinfo_out, is_inplace);
     }
 };
 
@@ -573,11 +686,11 @@ class ElementwisePowerBroadcastValidationFixture : public ArithmeticOperationsGe
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::POWER, shape0, shape1,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -586,11 +699,11 @@ class ElementwisePowerValidationFixture : public ArithmeticOperationsGenericFixt
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, bool is_inplace)
     {
         ArithmeticOperationsGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::POWER, shape, shape,
                                                                                              data_type0, data_type1, output_data_type,
-                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo());
+                                                                                             QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), is_inplace);
     }
 };
 
@@ -599,11 +712,11 @@ class ElementwisePowerBroadcastValidationFloatFixture : public ArithmeticOperati
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape0, const TensorShape &shape1, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::POWER, shape0, shape1,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 
@@ -612,11 +725,11 @@ class ElementwisePowerValidationFloatFixture : public ArithmeticOperationsFuseAc
 {
 public:
     template <typename...>
-    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info)
+    void setup(const TensorShape &shape, DataType data_type0, DataType data_type1, DataType output_data_type, ActivationLayerInfo act_info, bool is_inplace)
     {
         ArithmeticOperationsFuseActivationFixture<TensorType, AccessorType, FunctionType, T>::setup(ArithmeticOperation::POWER, shape, shape,
                                                                                                     data_type0, data_type1, output_data_type,
-                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info);
+                                                                                                    QuantizationInfo(), QuantizationInfo(), QuantizationInfo(), act_info, is_inplace);
     }
 };
 

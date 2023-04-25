@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,28 +22,29 @@
  * IN THE SOFTWARE.
  */
 #pragma once
-#ifdef __ARM_FEATURE_SVE
 
+#ifdef ARM_COMPUTE_ENABLE_SVE
 #include "../std_transforms_sve.hpp"
+#include "../performance_parameters.hpp"
 
 #define ARGLIST  \
-   unsigned int, const unsigned int *, \
-   IndirectInputArg<int8_t>, \
-   size_t, size_t, \
-   const int8_t *, \
-   IndirectOutputArg<int8_t>, \
-   const Requantize32 *, const int32_t *, unsigned int
+    unsigned int, const unsigned int *, \
+    IndirectInputArg<int8_t>, \
+    size_t, size_t, \
+    const int8_t *, \
+    IndirectOutputArg<int8_t>, \
+    const Requantize32 *, const int32_t *, unsigned int
 
 namespace arm_gemm
 {
-
 // Actual kernel implementations
 void sve_hybrid_s8qa_dot_4x4VL( ARGLIST );
 
 class cls_sve_hybrid_s8qa_dot_4x4VL
 {
 public:
-    typedef int8_t operand_type;
+    typedef int8_t lhs_operand_type;
+    typedef int8_t rhs_operand_type;
     typedef int8_t result_type;
 
     typedef void (*kern_type)( ARGLIST );
@@ -69,11 +70,25 @@ public:
         return false;
     }
 
-    StdTransformsSVE<operand_type, result_type, 4, 4, 4> transforms = {};
+    StdTransformsSVE<rhs_operand_type, result_type, 4, 4, 4> transforms = {};
+    template<typename T>
+    static inline PerformanceParameters get_performance_parameters(const CPUInfo *ci)
+    {
+
+        if (std::is_same<T, int8_t>::value) {
+            switch (ci->get_cpu_model()) {
+                default:
+                    return { 29.89 };
+                case CPUModel::A510:
+                    return { 17.12 };
+            }
+        }
+
+        return { 1.0 };
+    }
 
     // Default to the generic kernel
     kern_type kernel=sve_hybrid_s8qa_dot_4x4VL;
-
     cls_sve_hybrid_s8qa_dot_4x4VL(const CPUInfo *)
     {
     }
@@ -82,4 +97,5 @@ public:
 } // namespace arm_gemm
 
 #undef ARGLIST
-#endif // __ARM_FEATURE_SVE
+
+#endif // ARM_COMPUTE_ENABLE_SVE

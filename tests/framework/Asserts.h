@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,6 +30,8 @@
 #include <sstream>
 #include <type_traits>
 
+#include "utils/TypePrinter.h"
+
 namespace arm_compute
 {
 namespace test
@@ -40,6 +42,11 @@ namespace framework
 inline int make_printable(int8_t value)
 {
     return value;
+}
+
+inline std::string make_printable(const arm_compute::WeightFormat wf)
+{
+    return arm_compute::to_string(wf);
 }
 
 inline unsigned int make_printable(uint8_t value)
@@ -153,6 +160,7 @@ ARM_COMPUTE_TEST_COMP_FACTORY(ASSERT, Assertion, !=, NOT_EQUAL, throw arm_comput
         arm_compute::test::framework::Framework::get().clear_test_info();                                                                     \
     } while(false)
 
+#if defined(ARM_COMPUTE_ASSERTS_ENABLED)
 #define ARM_COMPUTE_EXPECT_THROW(X, LEVEL)                                                                                                    \
     do                                                                                                                                        \
     {                                                                                                                                         \
@@ -175,6 +183,17 @@ ARM_COMPUTE_TEST_COMP_FACTORY(ASSERT, Assertion, !=, NOT_EQUAL, throw arm_comput
         }                                                                                                                                     \
         arm_compute::test::framework::Framework::get().clear_test_info();                                                                     \
     } while(false)
+#else // defined(ARM_COMPUTE_ASSERTS_ENABLED)
+#define ARM_COMPUTE_EXPECT_THROW(X, LEVEL)                                   \
+    do                                                                       \
+    {                                                                        \
+        std::stringstream msg;                                               \
+        msg << "'" #X "' Skipped: asserts disabled, cannot throw\n";         \
+        arm_compute::test::framework::Framework::get().print_test_info(msg); \
+        arm_compute::test::framework::Framework::get().log_info(msg.str());  \
+        arm_compute::test::framework::Framework::get().clear_test_info();    \
+    } while(false)
+#endif // defined(ARM_COMPUTE_ASSERTS_ENABLED)
 
 #define ARM_COMPUTE_ASSERT_FAIL(MSG)                                                                              \
     do                                                                                                            \

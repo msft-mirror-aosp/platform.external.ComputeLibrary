@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,9 +25,9 @@
 
 #include "arm_compute/core/Helpers.h"
 #include "arm_compute/runtime/NEON/NEScheduler.h"
+#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEL2NormalizeLayerKernel.h"
 #include "src/core/NEON/kernels/NEReductionOperationKernel.h"
-#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -44,13 +44,15 @@ NEL2NormalizeLayer::NEL2NormalizeLayer(std::shared_ptr<IMemoryManager> memory_ma
 
 void NEL2NormalizeLayer::configure(ITensor *input, ITensor *output, int axis, float epsilon)
 {
+    ARM_COMPUTE_LOG_PARAMS(input, output, axis, epsilon);
+
     // Manage intermediate buffers
     _memory_group.manage(&_sumsq);
 
     // Configure Kernels
     const uint32_t actual_axis = wrap_around(axis, max_input_tensor_dim);
     _reduce_func.configure(input, &_sumsq, actual_axis, ReductionOperation::SUM_SQUARE);
-    _normalize_kernel = arm_compute::support::cpp14::make_unique<NEL2NormalizeLayerKernel>();
+    _normalize_kernel = std::make_unique<NEL2NormalizeLayerKernel>();
     _normalize_kernel->configure(input, &_sumsq, output, axis, epsilon);
 
     // Allocate intermediate tensors

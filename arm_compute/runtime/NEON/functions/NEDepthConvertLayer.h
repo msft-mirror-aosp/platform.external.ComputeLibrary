@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,39 +24,50 @@
 #ifndef ARM_COMPUTE_NEDEPTHCONVERT_H
 #define ARM_COMPUTE_NEDEPTHCONVERT_H
 
-#include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/NEON/INESimpleFunctionNoBorder.h"
+#include "arm_compute/runtime/IFunction.h"
 
-#include <cstdint>
+#include "arm_compute/core/Types.h"
+
+#include <memory>
 
 namespace arm_compute
 {
 class ITensor;
 class ITensorInfo;
 
-/**Basic function to run @ref NEDepthConvertLayerKernel */
-class NEDepthConvertLayer : public INESimpleFunctionNoBorder
+/**Basic function to run @ref cpu::kernels::CpuCastKernel */
+class NEDepthConvertLayer : public IFunction
 {
 public:
-    /* Contructor */
-    NEDepthConvertLayer() = default;
-    /** Prevent instances of this class from being copied (As this class contains pointers)*/
+    /** Constructor */
+    NEDepthConvertLayer();
+    /** Destructor */
+    ~NEDepthConvertLayer();
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
     NEDepthConvertLayer(const NEDepthConvertLayer &) = delete;
-    /** Prevent instances of this class from being copied (As this class contains pointers)*/
-    const NEDepthConvertLayer &operator=(const NEDepthConvertLayer &) = delete;
-    /** Default destructor */
-    ~NEDepthConvertLayer() = default;
+    /** Default move constructor */
+    NEDepthConvertLayer(NEDepthConvertLayer &&);
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    NEDepthConvertLayer &operator=(const NEDepthConvertLayer &) = delete;
+    /** Default move assignment operator */
+    NEDepthConvertLayer &operator=(NEDepthConvertLayer &&);
     /** Initialize the function's source, destination
      *
-     * Valid conversions Input -> Output :
+     * Valid data layouts:
+     * - All
      *
-     *   - QASYMM8  -> F16, F32
-     *   - U8       -> U16, S16, S32
-     *   - U16      -> U8, U32
-     *   - S16      -> U8, S32
-     *   - BFLOAT16 -> F32
-     *   - F16      -> QASYMM8, F32
-     *   - F32      -> QASYMM8, F16, BFLOAT16
+     * Valid data type configurations:
+     * |src            |dst                        |
+     * |:--------------|:--------------------------|
+     * |QASYMM8        | F16, F32                  |
+     * |U8             | U16, S16, S32             |
+     * |U16            | U8, U32                   |
+     * |S16            | U8, S32                   |
+     * |BFLOAT16       | F32                       |
+     * |F16            | QASYMM8, F32              |
+     * |F32            | QASYMM8, F16, BFLOAT16    |
+     *
+     * Input data type must be different than output data type.
      *
      * @param[in]  input  The input tensor to convert. Data types supported: QASYMM8/U8/U16/S16/BFLOAT16/F16/F32.
      * @param[out] output The output tensor. Data types supported: QASYMM8/U8/U16/S16/U32/S32/BFLOAT16/F16/F32.
@@ -74,6 +85,13 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output, ConvertPolicy policy, uint32_t shift = 0);
+
+    // Inherited methods overridden
+    void run() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_NEDEPTHCONVERT_H*/

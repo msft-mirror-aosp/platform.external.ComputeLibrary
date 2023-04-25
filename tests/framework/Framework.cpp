@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,7 +24,6 @@
 #include "Framework.h"
 
 #include "arm_compute/runtime/Scheduler.h"
-#include "support/MemorySupport.h"
 #include "tests/framework/ParametersLibrary.h"
 #include "tests/framework/TestFilter.h"
 
@@ -36,6 +35,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <type_traits>
 
@@ -94,7 +94,7 @@ Framework::Framework()
                                    Instrument::make_instrument<OpenCLMemoryUsage, ScaleFactor::SCALE_1M>);
 #endif /* ARM_COMPUTE_CL */
 
-    instruments_info = support::cpp14::make_unique<InstrumentsInfo>();
+    instruments_info = std::make_unique<InstrumentsInfo>();
 }
 
 std::set<InstrumentsDescription> Framework::available_instruments() const
@@ -133,6 +133,7 @@ void Framework::init(const FrameworkConfig &config)
     _num_iterations = config.num_iterations;
     _log_level      = config.log_level;
     _cooldown_sec   = config.cooldown_sec;
+    _configure_only = config.configure_only;
 
     _instruments = std::set<framework::InstrumentsDescription>(std::begin(config.instruments), std::end(config.instruments));
 }
@@ -208,6 +209,7 @@ void Framework::log_test_end(const TestInfo &info)
     {
         func_on_all_printers([&](Printer * p)
         {
+            p->print_profiler_header(_test_results.at(info).header_data);
             p->print_measurements(_test_results.at(info).measurements);
         });
     }
@@ -527,10 +529,11 @@ void Framework::run_test(const TestInfo &info, TestCaseFactory &test_factory)
     {
         if(_stop_on_error)
         {
-            throw std::runtime_error("Abort on first error.");
+            throw std::runtime_error("Abandon on first error.");
         }
     }
 
+    result.header_data  = profiler.header();
     result.measurements = profiler.measurements();
 
     set_test_result(info, result);
@@ -629,6 +632,7 @@ void Framework::print_test_results(Printer &printer) const
     for(const auto &test : _test_results)
     {
         printer.print_test_header(test.first);
+        printer.print_profiler_header(test.second.header_data);
         printer.print_measurements(test.second.measurements);
         printer.print_test_footer();
     }
@@ -678,7 +682,7 @@ std::vector<TestInfo> Framework::test_infos() const
 
     for(const auto &factory : _test_factories)
     {
-        TestInfo test_info{ id, factory->name(), factory->mode(), factory->status() };
+        const TestInfo test_info{ id, factory->name(), factory->mode(), factory->status() };
 
         if(_test_filter->is_selected(test_info))
         {
@@ -700,6 +704,21 @@ void Framework::set_instruments_info(InstrumentsInfo instr_info)
 {
     ARM_COMPUTE_ERROR_ON(instruments_info == nullptr);
     *instruments_info = instr_info;
+}
+
+bool Framework::configure_only() const
+{
+    return _configure_only;
+}
+
+bool Framework::new_fixture_call() const
+{
+    return _new_fixture_call;
+}
+
+void Framework::set_new_fixture_call(bool val)
+{
+    _new_fixture_call = val;
 }
 } // namespace framework
 } // namespace test

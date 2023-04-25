@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -65,9 +65,14 @@ protected:
     template <typename U>
     void fill(U &&tensor)
     {
-        if(!is_data_type_quantized(tensor.data_type()))
+        if(tensor.data_type() == DataType::F32)
         {
-            std::uniform_real_distribution<> distribution(-1.f, 1.f);
+            std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+            library->fill(tensor, distribution, 0);
+        }
+        else if(tensor.data_type() == DataType::F16)
+        {
+            arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
             library->fill(tensor, distribution, 0);
         }
         else // data type is quantized_asymmetric
@@ -101,9 +106,9 @@ protected:
         MaxUnpoolingFunctionType unpool_layer;
         unpool_layer.configure(&dst, &indices, &unpooled, pool_info);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(indices.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(indices.info()->is_resizable());
 
         // Allocate tensors
         src.allocator()->allocate();
@@ -111,10 +116,10 @@ protected:
         indices.allocator()->allocate();
         unpooled.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!indices.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!unpooled.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!indices.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!unpooled.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src));

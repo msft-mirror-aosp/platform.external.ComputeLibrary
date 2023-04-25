@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -58,17 +58,26 @@ protected:
     template <typename U>
     void fill(U &&tensor)
     {
-        if(!is_data_type_quantized(tensor.data_type()))
+        if(tensor.data_type() == DataType::F32)
         {
-            std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
+            std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
             library->fill(tensor, distribution, 0);
         }
-        else
+        else if(tensor.data_type() == DataType::F16)
+        {
+            arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
+            library->fill(tensor, distribution, 0);
+        }
+        else if(is_data_type_quantized(tensor.data_type()))
         {
             std::pair<int, int> bounds = get_quantized_bounds(tensor.quantization_info(), -1.0f, 1.0f);
             std::uniform_int_distribution<> distribution(bounds.first, bounds.second);
 
             library->fill(tensor, distribution, 0);
+        }
+        else
+        {
+            library->fill_tensor_uniform(tensor, 0);
         }
     }
 
@@ -83,15 +92,15 @@ protected:
         FunctionType reduction_mean;
         reduction_mean.configure(&src, axis, keep_dims, &dst);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src));
@@ -115,7 +124,13 @@ protected:
         {
             TensorShape output_shape = i == 0 ? src_shape : out.shape();
             output_shape.set(axis[i], 1);
-            out = reference::reduction_operation<T, T>(i == 0 ? src : out, output_shape, axis[i], ReductionOperation::MEAN_SUM, quantization_info_output);
+            bool is_opencl = false;
+
+#ifdef ARM_COMPUTE_OPENCL_ENABLED
+            is_opencl = std::is_same<CLTensor, TensorType>::value; // Round down to zero on opencl to match kernel
+#endif /* ARM_COMPUTE_OPENCL_ENABLED */
+            out = reference::reduction_operation<T, T>(i == 0 ? src : out, output_shape, axis[i], ReductionOperation::MEAN_SUM, quantization_info_output, is_opencl ? RoundingPolicy::TO_ZERO : RoundingPolicy::TO_NEAREST_UP);
+
         }
 
         if(!keep_dims)
