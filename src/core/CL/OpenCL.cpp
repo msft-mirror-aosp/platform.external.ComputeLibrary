@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -62,18 +62,32 @@ bool CLSymbols::load_default()
 
     for(const auto &lib : libraries)
     {
-        if(load(lib))
+        if(load(lib, /* use_loader */false))
         {
             ARM_COMPUTE_ERROR_ON_MSG(this->clBuildProgram_ptr == nullptr, "Failed to load OpenCL symbols from shared library");
             return true;
         }
     }
 
+#ifdef __ANDROID__
+    // When running in NDK environment, the above libraries are not accessible.
+    static const std::vector<std::string> android_libraries{ "libOpenCL-pixel.so", "libOpenCL-car.so" };
+
+    for(const auto &lib : android_libraries)
+    {
+        if(load(lib, /* use_loader */true))
+        {
+            ARM_COMPUTE_ERROR_ON_MSG(this->clBuildProgram_ptr == nullptr, "Failed to load OpenCL symbols from android shared library");
+            return true;
+        }
+    }
+#endif /* __ANDROID__ */
+
     std::cerr << "Couldn't find any OpenCL library.\n";
     return false;
 }
 
-bool CLSymbols::load(const std::string &library)
+bool CLSymbols::load(const std::string &library, bool use_loader)
 {
     void *handle = dlopen(library.c_str(), RTLD_LAZY | RTLD_LOCAL);
 
@@ -85,12 +99,33 @@ bool CLSymbols::load(const std::string &library)
         return false;
     }
 
+#ifdef __ANDROID__
+    typedef void* (*loadOpenCLPointer_t)(const char* name);
+    loadOpenCLPointer_t loadOpenCLPointer;
+    if (use_loader) {
+        typedef void (*enableOpenCL_t)();
+        enableOpenCL_t enableOpenCL =
+            reinterpret_cast<enableOpenCL_t>(dlsym(handle, "enableOpenCL"));
+        enableOpenCL();
+
+        loadOpenCLPointer = reinterpret_cast<loadOpenCLPointer_t>(
+            dlsym(handle, "loadOpenCLPointer"));
+    } else {
+        loadOpenCLPointer = nullptr;
+    }
+#define LOAD_FUNCTION_PTR(func_name, _handle) \
+    func_name##_ptr = reinterpret_cast<decltype(func_name) *>( use_loader ? \
+        loadOpenCLPointer(#func_name) : dlsym(handle, #func_name));
+#else /* __ANDROID__ */
+    (void)use_loader; // Avoid unused warning
 #define LOAD_FUNCTION_PTR(func_name, handle) \
     func_name##_ptr = reinterpret_cast<decltype(func_name) *>(dlsym(handle, #func_name));
+#endif /* __ANDROID__ */
 
     LOAD_FUNCTION_PTR(clCreateContext, handle);
     LOAD_FUNCTION_PTR(clCreateContextFromType, handle);
     LOAD_FUNCTION_PTR(clCreateCommandQueue, handle);
+    LOAD_FUNCTION_PTR(clCreateCommandQueueWithProperties, handle);
     LOAD_FUNCTION_PTR(clGetContextInfo, handle);
     LOAD_FUNCTION_PTR(clBuildProgram, handle);
     LOAD_FUNCTION_PTR(clEnqueueNDRangeKernel, handle);
@@ -122,6 +157,7 @@ bool CLSymbols::load(const std::string &library)
     LOAD_FUNCTION_PTR(clGetDeviceIDs, handle);
     LOAD_FUNCTION_PTR(clGetMemObjectInfo, handle);
     LOAD_FUNCTION_PTR(clRetainEvent, handle);
+    LOAD_FUNCTION_PTR(clGetPlatformInfo, handle);
     LOAD_FUNCTION_PTR(clGetPlatformIDs, handle);
     LOAD_FUNCTION_PTR(clGetKernelWorkGroupInfo, handle);
     LOAD_FUNCTION_PTR(clGetCommandQueueInfo, handle);
@@ -134,6 +170,7 @@ bool CLSymbols::load(const std::string &library)
     LOAD_FUNCTION_PTR(clEnqueueMarker, handle);
     LOAD_FUNCTION_PTR(clWaitForEvents, handle);
     LOAD_FUNCTION_PTR(clCreateImage, handle);
+    LOAD_FUNCTION_PTR(clSetKernelExecInfo, handle);
 
     // Third-party extensions
     LOAD_FUNCTION_PTR(clImportMemoryARM, handle);
@@ -151,6 +188,23 @@ bool CLSymbols::load(const std::string &library)
 bool opencl_is_available()
 {
     CLSymbols::get().load_default();
+
+    // Using static objects that rely on OpenCL in their constructor or
+    // destructor is implementation defined according to the OpenCL API
+    // Specification. These objects include CLScheduler.
+    //
+    // For compatibility with OpenCL runtimes that also use static objects to
+    // hold their state, we call a harmless OpenCL function (clGetPlatformIDs
+    // with invalid parameters must result in CL_INVALID_VALUE) to ensure the
+    // runtimes have a chance to initialize their static objects first. Thanks
+    // to C++11 rules about normal program completion (cf [basic.start]), this
+    // ensures their static objects are destroyed last, i.e. after the
+    // singleton CLScheduler is destroyed.
+    //
+    // When OpenCL is not available, this call results in CL_OUT_OF_RESOURCES,
+    // which is equally harmless.
+    (void)clGetPlatformIDs(0, nullptr, nullptr);
+
     return CLSymbols::get().clBuildProgram_ptr != nullptr;
 }
 } // namespace arm_compute
@@ -264,6 +318,23 @@ cl_command_queue clCreateCommandQueue(cl_context                  context,
 {
     arm_compute::CLSymbols::get().load_default();
     auto func = arm_compute::CLSymbols::get().clCreateCommandQueue_ptr;
+    if(func != nullptr)
+    {
+        return func(context, device, properties, errcode_ret);
+    }
+    else
+    {
+        return nullptr;
+    }
+}
+
+cl_command_queue clCreateCommandQueueWithProperties(cl_context                 context,
+                                                    cl_device_id               device,
+                                                    const cl_queue_properties *properties,
+                                                    cl_int                    *errcode_ret)
+{
+    arm_compute::CLSymbols::get().load_default();
+    auto func = arm_compute::CLSymbols::get().clCreateCommandQueueWithProperties_ptr;
     if(func != nullptr)
     {
         return func(context, device, properties, errcode_ret);
@@ -847,6 +918,24 @@ cl_int clRetainEvent(cl_event event)
     }
 }
 
+cl_int clGetPlatformInfo(cl_platform_id   platform,
+                         cl_platform_info param_name,
+                         size_t           param_value_size,
+                         void            *param_value,
+                         size_t          *param_value_size_ret)
+{
+    arm_compute::CLSymbols::get().load_default();
+    auto func = arm_compute::CLSymbols::get().clGetPlatformInfo_ptr;
+    if(func != nullptr)
+    {
+        return func(platform, param_name, param_value_size, param_value, param_value_size_ret);
+    }
+    else
+    {
+        return CL_OUT_OF_RESOURCES;
+    }
+}
+
 cl_int clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
 {
     arm_compute::CLSymbols::get().load_default();
@@ -959,6 +1048,23 @@ clCreateImage(cl_context             context,
             *errcode_ret = CL_OUT_OF_RESOURCES;
         }
         return nullptr;
+    }
+}
+
+cl_int clSetKernelExecInfo(cl_kernel           kernel,
+                           cl_kernel_exec_info param_name,
+                           size_t              param_value_size,
+                           const void         *param_value)
+{
+    arm_compute::CLSymbols::get().load_default();
+    auto func = arm_compute::CLSymbols::get().clSetKernelExecInfo_ptr;
+    if(func != nullptr)
+    {
+        return func(kernel, param_name, param_value_size, param_value);
+    }
+    else
+    {
+        return CL_OUT_OF_RESOURCES;
     }
 }
 

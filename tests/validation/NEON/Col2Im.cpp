@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,7 +22,8 @@
  * SOFTWARE.
  */
 #include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/NEON/functions/NECol2Im.h"
+#include "src/cpu/kernels/CpuCol2ImKernel.h"
+#include "tests/NEON/Helper.h"
 #include "tests/datasets/ShapeDatasets.h"
 #include "tests/framework/Asserts.h"
 #include "tests/framework/Macros.h"
@@ -37,6 +38,8 @@ namespace validation
 {
 TEST_SUITE(NEON)
 TEST_SUITE(Col2Im)
+
+using CpuCol2Im = NESynthetizeFunction<cpu::kernels::CpuCol2ImKernel>;
 
 // *INDENT-OFF*
 // clang-format off
@@ -56,7 +59,7 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(zip(
                framework::dataset::make("Expected", { false, false, false, true })),
                input_info, output_info, convolved_width, convolved_height, expected)
 {
-    bool status = bool(NECol2Im::validate(&input_info, &output_info, Size2D(convolved_width, convolved_height)));
+    bool status = bool(CpuCol2Im::validate(&input_info, &output_info, Size2D(convolved_width, convolved_height)));
     ARM_COMPUTE_EXPECT(status == expected, framework::LogLevel::ERRORS);
 }
 // clang-format on

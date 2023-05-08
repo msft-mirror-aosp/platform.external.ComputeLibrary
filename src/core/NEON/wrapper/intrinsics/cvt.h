@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020, 2022-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,20 +59,36 @@ VCVT_TO_F16_IMPL(float16x4_t, float32x4_t, vcvt, f16, f32)
 #endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 
 template <typename T>
-inline typename std::enable_if<std::is_same<T, uint8_t>::value, uint32x4_t>::type
+inline typename std::enable_if < std::is_same<T, uint8_t>::value || std::is_same<T, uint32_t>::value, uint32x4_t >::type
 vcvt(const float32x4_t &a)
 {
     return vcvtq_u32_f32(a);
 }
 
 template <typename T>
-inline typename std::enable_if<std::is_same<T, int8_t>::value, int32x4_t>::type
+inline typename std::enable_if < std::is_same<T, int8_t>::value || std::is_same<T, int32_t>::value, int32x4_t >::type
 vcvt(const float32x4_t &a)
 {
     return vcvtq_s32_f32(a);
 }
 
-#if defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16)
+#ifdef __aarch64__
+template <typename T>
+inline typename std::enable_if<std::is_same<T, uint32_t>::value, uint32x4_t>::type
+vcvta(const float32x4_t &a)
+{
+    return vcvtaq_u32_f32(a);
+}
+
+template <typename T>
+inline typename std::enable_if<std::is_same<T, int32_t>::value, int32x4_t>::type
+vcvta(const float32x4_t &a)
+{
+    return vcvtaq_s32_f32(a);
+}
+#endif //__aarch64__
+
+#if defined(ARM_COMPUTE_ENABLE_BF16)
 /** Convert 2x128-bit floating point vectors into 1x128-bit bfloat16 vector
  *
  * @param[in]     inptr  Pointer to the input memory to load values from
@@ -89,7 +105,7 @@ inline void vcvt_bf16_f32(const float *inptr, uint16_t *outptr)
         : [outptr] "r"(outptr)
         : "v0", "v1", "memory");
 }
-#endif /* defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16) */
+#endif /* defined(ARM_COMPUTE_ENABLE_BF16) */
 
 } // namespace wrapper
 } // namespace arm_compute

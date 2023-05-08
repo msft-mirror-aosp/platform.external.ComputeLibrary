@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,6 +27,7 @@
 #include "arm_compute/core/Types.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "arm_compute/runtime/CL/CLTensor.h"
+#include "arm_compute/runtime/CL/functions/CLPermute.h"
 #include "arm_compute/runtime/CL/functions/CLReshapeLayer.h"
 #include "arm_compute/runtime/CPP/CPPScheduler.h"
 #include "arm_compute/runtime/CPP/functions/CPPBoxWithNonMaximaSuppressionLimit.h"
@@ -39,24 +40,23 @@ namespace arm_compute
 {
 class CLCompileContext;
 class CLBoundingBoxTransformKernel;
-class CLDequantizationLayerKernel;
+class CLDequantizationLayer;
 class CLComputeAllAnchorsKernel;
 class CLPadLayerKernel;
-class CLPermuteKernel;
-class CLQuantizationLayerKernel;
+class CLQuantizationLayer;
 class ICLTensor;
 class ITensorInfo;
 
 /** Basic function to generate proposals for a RPN (Region Proposal Network)
  *
  * This function calls the following OpenCL kernels:
- * -# @ref CLComputeAllAnchors
+ * -# @ref CLComputeAllAnchorsKernel
  * -# @ref CLPermute x 2
  * -# @ref CLReshapeLayer x 2
  * -# @ref CLBoundingBoxTransform
  * -# @ref CLPadLayerKernel
- * -# @ref CLDequantizationLayerKernel x 2
- * -# @ref CLQuantizationLayerKernel
+ * -# @ref CLDequantizationLayer x 2
+ * -# @ref CLQuantizationLayer
  * And the following CPP functions:
  * -# @ref CPPBoxWithNonMaximaSuppressionLimit
  */
@@ -76,6 +76,16 @@ public:
     ~CLGenerateProposalsLayer();
 
     /** Set the input and output tensors.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src0           |src1               |src2     |dst            |
+     * |:--------------|:------------------|:--------|:--------------|
+     * |F16            |F16                |F16      |F16            |
+     * |F32            |F32                |F32      |F32            |
+     * |QASYMM8        |QSYMM8             |QSYMM16  |QASYMM8        |
      *
      * @param[in]  scores              Scores from convolution layer of size (W, H, A), where H and W are the height and width of the feature map, and A is the number of anchors.
      *                                 Data types supported: QASYMM8/F16/F32
@@ -137,16 +147,16 @@ private:
     MemoryGroup _memory_group;
 
     // OpenCL kernels
-    std::unique_ptr<CLPermuteKernel>              _permute_deltas_kernel;
+    CLPermute                                     _permute_deltas;
     CLReshapeLayer                                _flatten_deltas;
-    std::unique_ptr<CLPermuteKernel>              _permute_scores_kernel;
+    CLPermute                                     _permute_scores;
     CLReshapeLayer                                _flatten_scores;
     std::unique_ptr<CLComputeAllAnchorsKernel>    _compute_anchors_kernel;
     std::unique_ptr<CLBoundingBoxTransformKernel> _bounding_box_kernel;
     std::unique_ptr<CLPadLayerKernel>             _pad_kernel;
-    std::unique_ptr<CLDequantizationLayerKernel>  _dequantize_anchors;
-    std::unique_ptr<CLDequantizationLayerKernel>  _dequantize_deltas;
-    std::unique_ptr<CLQuantizationLayerKernel>    _quantize_all_proposals;
+    std::unique_ptr<CLDequantizationLayer>        _dequantize_anchors;
+    std::unique_ptr<CLDequantizationLayer>        _dequantize_deltas;
+    std::unique_ptr<CLQuantizationLayer>          _quantize_all_proposals;
 
     // CPP functions
     CPPBoxWithNonMaximaSuppressionLimit _cpp_nms;
