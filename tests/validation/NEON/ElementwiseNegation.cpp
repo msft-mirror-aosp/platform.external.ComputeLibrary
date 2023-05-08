@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,7 +32,7 @@
 #include "tests/framework/Macros.h"
 #include "tests/framework/datasets/Datasets.h"
 #include "tests/validation/Validation.h"
-#include "tests/validation/fixtures/ElementWiseUnaryFixture.h"
+#include "tests/validation/fixtures/ElementwiseUnaryFixture.h"
 
 namespace arm_compute
 {
@@ -114,7 +114,7 @@ TEST_SUITE_END() // S32
 TEST_SUITE_END() // Integer
 
 TEST_SUITE_END() // NegLayer
-TEST_SUITE_END() // NEON
+TEST_SUITE_END() // Neon
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

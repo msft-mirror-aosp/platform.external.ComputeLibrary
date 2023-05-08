@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -29,16 +29,7 @@
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 #include "arm_compute/core/utils/quantization/AsymmHelpers.h"
 #include "arm_compute/runtime/common/LSTMParams.h"
-#include "src/core/NEON/kernels/NEConvertFullyConnectedWeightsKernel.h"
-#include "src/core/NEON/kernels/NEConvertQuantizedSignednessKernel.h"
-#include "src/core/NEON/kernels/NEGEMMInterleave4x4Kernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpMatrixMultiplyKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionOutputStageKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpReductionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMMatrixAdditionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMMatrixMultiplyKernel.h"
-#include "src/core/NEON/kernels/NEGEMMTranspose1xWKernel.h"
+#include "src/common/utils/Log.h"
 
 namespace arm_compute
 {
@@ -77,6 +68,13 @@ void NELSTMLayer::configure(const ITensor *input,
                                  forget_gate_bias, cell_bias, output_gate_bias,
                                  output_state_in, cell_state_in,
                                  scratch_buffer, output_state_out, cell_state_out, output);
+    ARM_COMPUTE_LOG_PARAMS(input,
+                           input_to_forget_weights, input_to_cell_weights, input_to_output_weights,
+                           recurrent_to_forget_weights, recurrent_to_cell_weights, recurrent_to_output_weights,
+                           forget_gate_bias, cell_bias, output_gate_bias,
+                           output_state_in, cell_state_in,
+                           scratch_buffer, output_state_out, cell_state_out, output,
+                           lstm_params, activation_info, cell_threshold, projection_threshold);
 
     _is_layer_norm_lstm = lstm_params.use_layer_norm();
 
@@ -265,7 +263,7 @@ void NELSTMLayer::configure(const ITensor *input,
     if(cell_threshold != 0.f)
     {
         _perform_cell_clipping = true;
-        _cell_clip.configure(&_cell_state_out1, nullptr, ActivationLayerInfo(ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU, -cell_threshold, cell_threshold));
+        _cell_clip.configure(&_cell_state_out1, nullptr, ActivationLayerInfo(ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU, cell_threshold, -cell_threshold));
     }
 
     // Configure block that calculates the output
@@ -544,8 +542,8 @@ Status NELSTMLayer::validate(const ITensorInfo *input,
     ARM_COMPUTE_RETURN_ON_ERROR(NEArithmeticAddition::validate(&cell_state_tmp, &cell_state_tmp, &cell_state_tmp, ConvertPolicy::SATURATE));
     if(cell_threshold != 0.f)
     {
-        ARM_COMPUTE_RETURN_ON_ERROR(NEActivationLayer::validate(&cell_state_tmp, nullptr, ActivationLayerInfo(ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU, -cell_threshold,
-                                                                                                              cell_threshold)));
+        ARM_COMPUTE_RETURN_ON_ERROR(NEActivationLayer::validate(&cell_state_tmp, nullptr, ActivationLayerInfo(ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU, cell_threshold,
+                                                                                                              -cell_threshold)));
     }
 
     // Validate output gate tmp
@@ -667,6 +665,7 @@ void NELSTMLayer::run()
         _pixelwise_mul_cell_gate_coeff.run();
         _accum_cell_gate_bias.run();
     }
+
     _activation_cell_state.run();
     _pixelwise_mul_cell_state1.run();
     _pixelwise_mul_cell_state2.run();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,38 +24,61 @@
 #include "arm_compute/runtime/NEON/functions/NEMaxUnpoolingLayer.h"
 
 #include "arm_compute/core/ITensor.h"
+#include "arm_compute/core/Validate.h"
 #include "arm_compute/runtime/NEON/NEScheduler.h"
-#include "src/core/NEON/kernels/NEMaxUnpoolingLayerKernel.h"
-#include "src/core/NEON/kernels/NEMemsetKernel.h"
-#include "support/MemorySupport.h"
+#include "arm_compute/runtime/NEON/functions/NEFill.h"
+#include "src/common/utils/Log.h"
+#include "src/cpu/kernels/CpuMaxUnpoolingLayerKernel.h"
+#include "src/cpu/operators/CpuMaxUnpooling.h"
 
 namespace arm_compute
 {
+struct NEMaxUnpoolingLayer::Impl
+{
+    const ITensor                        *src{ nullptr };
+    const ITensor                        *indices{ nullptr };
+    ITensor                              *dst{ nullptr };
+    std::unique_ptr<cpu::CpuMaxUnpooling> op{ nullptr };
+};
+
 NEMaxUnpoolingLayer::~NEMaxUnpoolingLayer() = default;
 
 NEMaxUnpoolingLayer::NEMaxUnpoolingLayer()
-
-    : _memset_kernel(), _unpooling_layer_kernel()
+    : _fill_func(), _impl()
 {
 }
 
 void NEMaxUnpoolingLayer::configure(ITensor *input, ITensor *indices, ITensor *output, const PoolingLayerInfo &pool_info)
 {
+    ARM_COMPUTE_LOG_PARAMS(input, indices, output, pool_info);
+
     const PixelValue zero_value(0.f);
-    _memset_kernel          = arm_compute::support::cpp14::make_unique<NEMemsetKernel>();
-    _unpooling_layer_kernel = arm_compute::support::cpp14::make_unique<NEMaxUnpoolingLayerKernel>();
-    _memset_kernel->configure(output, zero_value);
-    _unpooling_layer_kernel->configure(input, indices, output, pool_info);
+    _fill_func     = std::make_unique<NEFill>();
+    _impl          = std::make_unique<Impl>();
+    _impl->src     = input;
+    _impl->indices = indices;
+    _impl->dst     = output;
+
+    _impl->op = std::make_unique<cpu::CpuMaxUnpooling>();
+    _fill_func->configure(output, zero_value);
+    _impl->op->configure(input->info(), indices->info(), output->info(), pool_info);
 }
 
 Status NEMaxUnpoolingLayer::validate(const ITensorInfo *input, const ITensorInfo *indices, const ITensorInfo *output, const PoolingLayerInfo &pool_info)
 {
-    return NEMaxUnpoolingLayerKernel::validate(input, indices, output, pool_info);
+    ARM_COMPUTE_RETURN_ERROR_ON_NULLPTR(input, output, indices);
+    ARM_COMPUTE_RETURN_ON_ERROR(cpu::CpuMaxUnpooling::validate(input, indices, output, pool_info));
+    return Status{};
 }
 
 void NEMaxUnpoolingLayer::run()
 {
-    NEScheduler::get().schedule(_memset_kernel.get(), Window::DimY);
-    NEScheduler::get().schedule(_unpooling_layer_kernel.get(), Window::DimY);
+    ITensorPack pack;
+    pack.add_tensor(TensorType::ACL_SRC_0, _impl->src);
+    pack.add_tensor(TensorType::ACL_SRC_1, _impl->indices);
+    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
+
+    _fill_func->run();
+    _impl->op->run(pack);
 }
 } /* namespace arm_compute */

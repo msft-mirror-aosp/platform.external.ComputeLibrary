@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,13 +24,16 @@
 #include "arm_compute/runtime/CPP/functions/CPPPermute.h"
 
 #include "arm_compute/core/CPP/kernels/CPPPermuteKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 using namespace arm_compute;
 
 void CPPPermute::configure(const ITensor *input, ITensor *output, const PermutationVector &perm)
 {
-    auto k = arm_compute::support::cpp14::make_unique<CPPPermuteKernel>();
+    ARM_COMPUTE_LOG_PARAMS(input, output, perm);
+
+    auto k = std::make_unique<CPPPermuteKernel>();
     k->configure(input, output, perm);
     _kernel = std::move(k);
 }
