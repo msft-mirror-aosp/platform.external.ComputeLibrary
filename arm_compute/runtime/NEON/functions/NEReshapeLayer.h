@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -34,7 +34,7 @@ namespace arm_compute
 // Forward declarations
 class ITensor;
 
-/** Basic function to run @ref NEReshapeLayerKernel */
+/** Basic function to run @ref cpu::kernels::CpuReshapeKernel */
 class NEReshapeLayer : public IFunction
 {
 public:
@@ -51,6 +51,14 @@ public:
     /** Default move assignment operator */
     NEReshapeLayer &operator=(NEReshapeLayer &&);
     /** Initialise the kernel's inputs and outputs
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src    |dst    |
+     * |:------|:------|
+     * |All    |All    |
      *
      * @param[in]  input  Input tensor. Data type supported: All
      * @param[out] output Output tensor. Data type supported: Same as @p input
@@ -73,41 +81,5 @@ private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
 };
-
-namespace experimental
-{
-/** Basic function to run @ref NEReshapeLayerKernel */
-class NEReshape : public INEOperator
-{
-public:
-    /** Default Constructor */
-    NEReshape() = default;
-    /** Default Destructor */
-    ~NEReshape();
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    NEReshape(const NEReshape &) = delete;
-    /** Default move constructor */
-    NEReshape(NEReshapeLayer &&);
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    NEReshape &operator=(const NEReshape &) = delete;
-    /** Default move assignment operator */
-    NEReshape &operator=(NEReshape &&);
-    /** Initialise the kernel's inputs and outputs
-     *
-     * @param[in]  input  Input tensor info. Data type supported: All
-     * @param[out] output Output info. Data type supported: Same as @p input
-     */
-    void configure(const ITensorInfo *input, ITensorInfo *output);
-
-    /** Static function to check if given info will lead to a valid configuration of @ref NEReshapeLayer
-     *
-     * @param[in] input  Input tensor info. Data type supported: All
-     * @param[in] output Output tensor info. Data type supported: Same as @p input
-     *
-     * @return a status
-     */
-    static Status validate(const ITensorInfo *input, const ITensorInfo *output);
-};
-} // namespace experimental
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_NERESHAPELAYER_H */

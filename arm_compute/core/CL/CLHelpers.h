@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,13 +26,13 @@
 
 #include "arm_compute/core/CL/CLTypes.h"
 #include "arm_compute/core/CL/OpenCL.h"
+#include "arm_compute/core/Types.h"
 
 #include <set>
 #include <string>
 
 namespace arm_compute
 {
-class CLCoreRuntimeContext;
 class CLCompileContext;
 class CLBuildOptions;
 
@@ -40,6 +40,9 @@ enum class DataType;
 
 /** Max vector width of an OpenCL vector */
 static constexpr unsigned int max_cl_vector_width = 16;
+
+/** Max number of manual loop unrolling */
+static constexpr int max_manual_loop_unrolling = 128;
 
 /** Translates a tensor data type to the appropriate OpenCL type.
  *
@@ -121,6 +124,14 @@ CLVersion get_cl_version(const cl::Device &device);
  */
 size_t get_cl_image_pitch_alignment(const cl::Device &device);
 
+/** Helper function to check whether non-uniform work group is supported
+ *
+ * @param[in] device A CL device
+ *
+ * @return True if the feature is supported
+ */
+bool get_cl_non_uniform_work_group_supported(const cl::Device &device);
+
 /** Helper function to check whether a given extension is supported
  *
  * @param[in] device         A CL device
@@ -196,16 +207,6 @@ bool preferred_dummy_work_items_support(const cl::Device &device);
  */
 bool image2d_from_buffer_supported(const cl::Device &device);
 
-/** Creates an opencl kernel
- *
- * @param[in] ctx         A context to be used to create the opencl kernel.
- * @param[in] kernel_name The kernel name.
- * @param[in] build_opts  The build options to be used for the opencl kernel compilation.
- *
- * @return An opencl kernel
- */
-cl::Kernel create_opencl_kernel(CLCoreRuntimeContext *ctx, const std::string &kernel_name, const CLBuildOptions &build_opts);
-
 /** Creates an opencl kernel using a compile context
  *
  * @param[in] ctx         A compile context to be used to create the opencl kernel.
@@ -226,5 +227,45 @@ cl::Kernel create_kernel(const CLCompileContext &ctx, const std::string &kernel_
  */
 cl::NDRange create_lws_hint_parallel_implementations(unsigned int input_dimension, unsigned int vector_size);
 
+/* Helper function to check if the workgroup batch size modifier parameter is supported on the cl device
+ *
+ * @param[in] device cl device to check for support
+ *
+ * @return true if the workgroup batch size modifier parameter is supported, false otherwise
+ */
+bool get_wbsm_support_info(const cl::Device &device);
+
+/* Helper function to set the workgroup batch size modifier parameter in the kernel
+ *
+ * @param[in] kernel    cl kernel to set the workgroup batch size modifier parameter
+ * @param[in] wbsm_hint workgroup batch size modifier to use
+ */
+void set_wbsm(cl::Kernel &kernel, cl_int wbsm_hint);
+
+/* Helper function to check if we can export the tensor to cl_image
+ *
+ * @param[in] input tensor
+ *
+ * @return true if we can export the tensor to cl_image
+ */
+bool export_to_cl_image(const ITensorInfo *tensor);
+
+/* Helper function to force unroll with pragma when any of the input values (iterations) are greater than @ref max_manual_loop_unrolling
+ *
+ * This function passes UNROLL_WITH_PRAGMA at compile time when any of the input values are greater than @ref max_manual_loop_unrolling
+ *
+ * @param[in] built_opts OpenCL kernel build options
+ * @param[in] values     Input values (iterations)
+ *
+ */
+void set_unroll_with_pragma(CLBuildOptions &built_opts, std::initializer_list<int> values);
+
+/** Helper function to check whether the cl_arm_matrix_multiply extension is supported
+ *
+ * @param[in] device A CL device
+ *
+ * @return True if the extension is supported
+ */
+bool arm_matrix_multiply_supported(const cl::Device &device);
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_CLHELPERS_H */

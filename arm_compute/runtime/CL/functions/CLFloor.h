@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,9 +24,11 @@
 #ifndef ARM_COMPUTE_CLFLOOR_H
 #define ARM_COMPUTE_CLFLOOR_H
 
-#include "arm_compute/runtime/CL/ICLSimpleFunction.h"
+#include "arm_compute/runtime/IFunction.h"
 
 #include "arm_compute/core/Types.h"
+
+#include <memory>
 
 namespace arm_compute
 {
@@ -34,11 +36,32 @@ class CLCompileContext;
 class ICLTensor;
 class ITensorInfo;
 
-/** Basic function to run @ref CLFloorKernel */
-class CLFloor : public ICLSimpleFunction
+/** Basic function to run @ref opencl::kernels::ClFloorKernel */
+class CLFloor : public IFunction
 {
 public:
+    /** Constructor */
+    CLFloor();
+    /** Destructor */
+    ~CLFloor();
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    CLFloor(const CLFloor &) = delete;
+    /** Default move constructor */
+    CLFloor(CLFloor &&);
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    CLFloor &operator=(const CLFloor &) = delete;
+    /** Default move assignment operator */
+    CLFloor &operator=(CLFloor &&);
     /** Set the source, destination of the kernel
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src    |dst    |
+     * |:------|:------|
+     * |F32    |F32    |
+     * |F16    |F16    |
      *
      * @param[in]  input  Source tensor. Data type supported: F16/F32.
      * @param[out] output Destination tensor. Same as @p input
@@ -59,6 +82,13 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output);
+
+    // Inherited methods overridden:
+    void run() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
-}
+} // namespace arm_compute
 #endif /* ARM_COMPUTE_CLFLOOR_H */
