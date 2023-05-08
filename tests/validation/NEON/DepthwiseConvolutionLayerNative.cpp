@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "src/cpu/kernels/CpuDepthwiseConv2dNativeKernel.h"
+#include "src/core/NEON/kernels/NEDepthwiseConvolutionLayerNativeKernel.h"
 #include "tests/NEON/Accessor.h"
 #include "tests/NEON/Helper.h"
 #include "tests/framework/Macros.h"
@@ -37,12 +37,12 @@ namespace validation
 {
 using namespace arm_compute::misc::shape_calculator;
 
-// Create function for CpuDepthwiseConvolutionKernel
-using CpuDepthwiseConvolutionNative = NESynthetizeFunctionWithZeroConstantKernelBorder<cpu::kernels::CpuDepthwiseConv2dNativeKernel>;
+// Create function for NEDepthwiseConvolutionLayerKernel
+using NEDepthwiseConvolutionLayerNative = NESynthetizeFunctionWithZeroConstantKernelBorder<NEDepthwiseConvolutionLayerNativeKernel>;
 
 // Fixture for NEDepthwiseConvolutionLayerKernel
 template <typename T>
-using CpuDepthwiseConvolutionNativeFixture = DepthwiseConvolutionLayerNativeValidationFixture<Tensor, Accessor, CpuDepthwiseConvolutionNative, T>;
+using NEDepthwiseConvolutionLayerNativeFixture = DepthwiseConvolutionLayerNativeValidationFixture<Tensor, Accessor, NEDepthwiseConvolutionLayerNative, T>;
 
 namespace
 {
@@ -124,9 +124,8 @@ TEST_CASE(ValidateNoPadding, framework::DatasetMode::ALL)
     auto biases  = create_tensor<Tensor>(bias_shape, data_type, 1, QuantizationInfo(), data_layout);
     auto dst     = create_tensor<Tensor>(TensorShape(), data_type, 1, QuantizationInfo(), data_layout);
 
-    cpu::kernels::CpuDepthwiseConv2dNativeKernel dwc;
-    const ConvolutionInfo info{pad_stride_info, 1, ActivationLayerInfo(), Size2D(1, 1)};
-    dwc.configure(src.info(), weights.info(), biases.info(), dst.info(), info);
+    NEDepthwiseConvolutionLayerNativeKernel dwc;
+    dwc.configure(&src, &weights, &biases, &dst, pad_stride_info);
 
     ARM_COMPUTE_EXPECT(src.info()->padding().empty(), framework::LogLevel::ERRORS);
     ARM_COMPUTE_EXPECT(weights.info()->padding().empty(), framework::LogLevel::ERRORS);
@@ -134,47 +133,9 @@ TEST_CASE(ValidateNoPadding, framework::DatasetMode::ALL)
     ARM_COMPUTE_EXPECT(dst.info()->padding().empty(), framework::LogLevel::ERRORS);
 }
 
-TEST_SUITE(KERNEL_SELECTION)
-DATA_TEST_CASE(KernelSelection_mul_and_add, framework::DatasetMode::ALL,
-               combine(combine(framework::dataset::make("CpuExt", std::string("NEON")),
-                       framework::dataset::make("DataType", { DataType::F32,
-                                                              DataType::F16,
-                                                              DataType::QASYMM8_SIGNED,
-                                                              DataType::QASYMM8,
-                                                              DataType::QSYMM8_PER_CHANNEL
-                                                            })),
-                       framework::dataset::make("DataType_per_channel", { DataType::QASYMM8,
-                                                                          DataType::QASYMM8_SIGNED
-                                                            })),
-                cpu_ext, data_type, data_type_per_channel)
-{
-    using namespace cpu::kernels;
-
-    cpuinfo::CpuIsaInfo cpu_isa{};
-    cpu_isa.neon = (cpu_ext == "NEON");
-    cpu_isa.fp16 = (data_type == DataType::F16);
-
-    const auto *selected_impl = CpuDepthwiseConv2dNativeKernel::get_implementation(
-        DepthwiseConv2dNativeDataTypeISASelectorData{ data_type, data_type_per_channel,cpu_isa },
-        cpu::KernelSelectionType::Preferred );
-
-    ARM_COMPUTE_ERROR_ON_NULLPTR(selected_impl);
-
-    std::string per_channel_str = "_";
-    if (data_type == DataType::QSYMM8_PER_CHANNEL)
-    {
-        per_channel_str = "_" + cpu_impl_dt(data_type_per_channel) + "_" ;
-    }
-    std::string expected = lower_string(cpu_ext) + "_" + cpu_impl_dt(data_type)  + per_channel_str + "deptwiseconv2dnative";
-    std::string actual   = selected_impl->name;
-
-    ARM_COMPUTE_EXPECT_EQUAL(expected, actual, framework::LogLevel::ERRORS);
-}
-TEST_SUITE_END() // KERNEL_SELECTION
-
 TEST_SUITE(Float)
 TEST_SUITE(FP32)
-FIXTURE_DATA_TEST_CASE_NEW(RunSmall, CpuDepthwiseConvolutionNativeFixture<float>, framework::DatasetMode::ALL,
+FIXTURE_DATA_TEST_CASE(RunSmall, NEDepthwiseConvolutionLayerNativeFixture<float>, framework::DatasetMode::ALL,
                 combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(width_values_precommit,
                                                                                                 height_values_precommit),
                                                                                                 channel_values_precommit),
@@ -191,7 +152,7 @@ FIXTURE_DATA_TEST_CASE_NEW(RunSmall, CpuDepthwiseConvolutionNativeFixture<float>
     validate(Accessor(_target), _reference, rel_tolerance_f32, 0.f, abs_tolerance_f32);
 }
 
-FIXTURE_DATA_TEST_CASE_NEW(RunLarge, CpuDepthwiseConvolutionNativeFixture<float>, framework::DatasetMode::NIGHTLY,
+FIXTURE_DATA_TEST_CASE(RunLarge, NEDepthwiseConvolutionLayerNativeFixture<float>, framework::DatasetMode::NIGHTLY,
                 combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(width_values_nightly,
                                                                                                 height_values_nightly),
                                                                                                 channel_values_nightly),
@@ -211,7 +172,7 @@ FIXTURE_DATA_TEST_CASE_NEW(RunLarge, CpuDepthwiseConvolutionNativeFixture<float>
 TEST_SUITE_END() // FP32
 TEST_SUITE_END() // Float
 TEST_SUITE_END() // DepthwiseConvolutionLayerNative
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

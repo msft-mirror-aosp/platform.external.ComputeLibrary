@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,7 +27,6 @@
 #include "arm_compute/core/Types.h"
 #include "arm_compute/runtime/NEON/functions/NEActivationLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEArithmeticAddition.h"
-#include "arm_compute/runtime/NEON/functions/NECopy.h"
 #include "arm_compute/runtime/NEON/functions/NEFullyConnectedLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEGEMM.h"
 
@@ -35,6 +34,7 @@ namespace arm_compute
 {
 // Forward declarations
 class ITensor;
+class NECopyKernel;
 
 /** Basic function to run @ref NERNNLayer */
 class NERNNLayer : public IFunction
@@ -53,16 +53,6 @@ public:
     /** Default destructor */
     ~NERNNLayer();
     /** Initialize the function
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0   |src1   |src2   |src3   |dst0   |dst1   |
-     * |:------|:------|:------|:------|:------|:------|
-     * |F16    |F16    |F16    |F16    |F16    |F16    |
-     * |F32    |F32    |F32    |F32    |F32    |F32    |
      *
      * @param[in]     input             Input is a 2-D tensor of shape [input_size, batch_size]. Data types supported: F16/F32
      * @param[in]     weights           Weights tensor of shape [input_size, num_units] that multiplies the input. Data types supported: Same as @p input
@@ -93,16 +83,16 @@ public:
     void prepare() override;
 
 private:
-    MemoryGroup           _memory_group;
-    NEGEMM                _gemm_state_f;
-    NEArithmeticAddition  _add_f;
-    NEActivationLayer     _activation;
-    NEFullyConnectedLayer _fully_connected;
-    NECopy                _copy_f;
-    Tensor                _fully_connected_out;
-    Tensor                _gemm_output;
-    Tensor                _add_output;
-    bool                  _is_prepared;
+    MemoryGroup                   _memory_group;
+    NEGEMM                        _gemm_state_f;
+    NEArithmeticAddition          _add_f;
+    NEActivationLayer             _activation;
+    NEFullyConnectedLayer         _fully_connected;
+    std::unique_ptr<NECopyKernel> _copy_kernel;
+    Tensor                        _fully_connected_out;
+    Tensor                        _gemm_output;
+    Tensor                        _add_output;
+    bool                          _is_prepared;
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NERNNLAYER_H */

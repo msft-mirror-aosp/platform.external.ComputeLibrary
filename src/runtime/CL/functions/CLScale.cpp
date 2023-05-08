@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,51 +23,61 @@
  */
 #include "arm_compute/runtime/CL/functions/CLScale.h"
 
-#include "arm_compute/core/CL/CLKernelLibrary.h"
 #include "arm_compute/core/CL/ICLTensor.h"
-#include "arm_compute/core/KernelDescriptors.h"
-#include "src/core/CL/ICLKernel.h"
-#include "src/gpu/cl/operators/ClScale.h"
+#include "arm_compute/core/Error.h"
+#include "arm_compute/core/Validate.h"
+#include "arm_compute/runtime/CL/CLScheduler.h"
+#include "src/core/CL/kernels/CLFillBorderKernel.h"
+#include "src/core/CL/kernels/CLScaleKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
-struct CLScale::Impl
-{
-    const ICLTensor                 *src{ nullptr };
-    ICLTensor                       *dst{ nullptr };
-    std::unique_ptr<opencl::ClScale> op{ nullptr };
-};
-
-CLScale::CLScale()
-    : _impl(std::make_unique<Impl>())
-{
-}
-CLScale::~CLScale() = default;
-
 void CLScale::configure(ICLTensor *input, ICLTensor *output, const ScaleKernelInfo &info)
 {
     configure(CLKernelLibrary::get().get_compile_context(), input, output, info);
 }
 
+void CLScale::configure(ICLTensor *input, ICLTensor *output, InterpolationPolicy policy, BorderMode border_mode, PixelValue constant_border_value, SamplingPolicy sampling_policy, bool use_padding,
+                        bool align_corners)
+{
+    configure(CLKernelLibrary::get().get_compile_context(), input, output, ScaleKernelInfo{ policy, border_mode, constant_border_value, sampling_policy, use_padding, align_corners });
+}
+
 void CLScale::configure(const CLCompileContext &compile_context, ICLTensor *input, ICLTensor *output, const ScaleKernelInfo &info)
 {
-    _impl->src = input;
-    _impl->dst = output;
+    auto k = arm_compute::support::cpp14::make_unique<CLScaleKernel>();
+    k->set_target(CLScheduler::get().target());
+    k->configure(compile_context, input, output, info);
+    _kernel = std::move(k);
 
-    _impl->op = std::make_unique<opencl::ClScale>();
-    _impl->op->configure(compile_context, input->info(), output->info(), info);
+    // Tune kernels
+    CLScheduler::get().tune_kernel_static(*_kernel);
+
+    auto border_mode_to_use = info.border_mode;
+    // In the case of NHWC we can't have undefined border mode as this would require to access elements outside z dimension,
+    // so we treat it like border constant.
+    if(info.border_mode == BorderMode::UNDEFINED && input->info()->data_layout() == DataLayout::NHWC)
+    {
+        border_mode_to_use = BorderMode::CONSTANT;
+    }
+    _border_handler->configure(compile_context, input, _kernel->border_size(), border_mode_to_use, info.constant_border_value);
+}
+
+void CLScale::configure(const CLCompileContext &compile_context, ICLTensor *input, ICLTensor *output, InterpolationPolicy policy, BorderMode border_mode, PixelValue constant_border_value,
+                        SamplingPolicy sampling_policy, bool use_padding, bool align_corners)
+{
+    configure(compile_context, input, output, ScaleKernelInfo{ policy, border_mode, constant_border_value, sampling_policy, use_padding, align_corners });
+}
+
+Status CLScale::validate(const ITensorInfo *input, const ITensorInfo *output, InterpolationPolicy policy, BorderMode border_mode, PixelValue constant_border_value, SamplingPolicy sampling_policy,
+                         bool use_padding, bool align_corners)
+{
+    return CLScale::validate(input, output, ScaleKernelInfo{ policy, border_mode, constant_border_value, sampling_policy, use_padding, align_corners });
 }
 
 Status CLScale::validate(const ITensorInfo *input, const ITensorInfo *output, const ScaleKernelInfo &info)
 {
-    return opencl::ClScale::validate(input, output, info);
-}
-
-void CLScale::run()
-{
-    ITensorPack pack;
-    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
-    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
-    _impl->op->run(pack);
+    return CLScaleKernel::validate(input, output, info);
 }
 } // namespace arm_compute

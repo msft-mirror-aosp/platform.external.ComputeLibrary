@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,26 +23,12 @@
  */
 #include "arm_compute/runtime/CL/functions/CLTranspose.h"
 
-#include "arm_compute/core/CL/CLKernelLibrary.h"
-#include "arm_compute/core/CL/ICLTensor.h"
-#include "arm_compute/core/Types.h"
-#include "arm_compute/core/Validate.h"
-#include "src/core/CL/ICLKernel.h"
-#include "src/gpu/cl/operators/ClTranspose.h"
+#include "src/core/CL/kernels/CLTransposeKernel.h"
+#include "support/MemorySupport.h"
 
-namespace arm_compute
-{
-struct CLTranspose::Impl
-{
-    const ICLTensor                     *src{ nullptr };
-    ICLTensor                           *dst{ nullptr };
-    std::unique_ptr<opencl::ClTranspose> op{ nullptr };
-};
-CLTranspose::CLTranspose()
-    : _impl(std::make_unique<Impl>())
-{
-}
-CLTranspose::~CLTranspose() = default;
+#include <utility>
+
+using namespace arm_compute;
 
 void CLTranspose::configure(const ICLTensor *input, ICLTensor *output)
 {
@@ -51,23 +37,12 @@ void CLTranspose::configure(const ICLTensor *input, ICLTensor *output)
 
 void CLTranspose::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output)
 {
-    ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
-    _impl->src = input;
-    _impl->dst = output;
-    _impl->op  = std::make_unique<opencl::ClTranspose>();
-    _impl->op->configure(compile_context, _impl->src->info(), _impl->dst->info());
+    auto k = arm_compute::support::cpp14::make_unique<CLTransposeKernel>();
+    k->configure(compile_context, input, output);
+    _kernel = std::move(k);
 }
 
 Status CLTranspose::validate(const ITensorInfo *input, const ITensorInfo *output)
 {
-    return opencl::ClTranspose::validate(input, output);
+    return CLTransposeKernel::validate(input, output);
 }
-
-void CLTranspose::run()
-{
-    ITensorPack pack;
-    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
-    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
-    _impl->op->run(pack);
-}
-} // namespace arm_compute

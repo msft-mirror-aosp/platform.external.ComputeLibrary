@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,13 +26,15 @@
 #include "arm_compute/runtime/CL/CLHelpers.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 
+#include "support/MemorySupport.h"
+
 namespace arm_compute
 {
 CLRuntimeContext::CLRuntimeContext()
-    : _gpu_owned_scheduler(std::make_unique<CLScheduler>()), _gpu_scheduler(_gpu_owned_scheduler.get()), _symbols(), _backend_type()
+    : _gpu_owned_scheduler(support::cpp14::make_unique<CLScheduler>()), _gpu_scheduler(_gpu_owned_scheduler.get()), _symbols(), _core_context()
 {
     _symbols.load_default();
-    auto ctx_dev_err = create_opencl_context_and_device(_backend_type);
+    auto ctx_dev_err = create_opencl_context_and_device();
     ARM_COMPUTE_ERROR_ON_MSG(std::get<2>(ctx_dev_err) != CL_SUCCESS, "Failed to create OpenCL context");
     auto             ctx   = std::get<0>(ctx_dev_err);
     auto             dev   = std::get<1>(ctx_dev_err);
@@ -40,11 +42,17 @@ CLRuntimeContext::CLRuntimeContext()
     _gpu_owned_scheduler->init(ctx, queue, dev, &_tuner);
     const std::string cl_kernels_folder("./cl_kernels");
     CLKernelLibrary::get().init(cl_kernels_folder, ctx, dev);
+    _core_context = CLCoreRuntimeContext(&CLKernelLibrary::get(), _gpu_owned_scheduler->context(), _gpu_owned_scheduler->queue());
 }
 
 CLKernelLibrary &CLRuntimeContext::kernel_library()
 {
     return CLKernelLibrary::get();
+}
+
+CLCoreRuntimeContext *CLRuntimeContext::core_runtime_context()
+{
+    return &_core_context;
 }
 
 void CLRuntimeContext::set_gpu_scheduler(CLScheduler *scheduler)

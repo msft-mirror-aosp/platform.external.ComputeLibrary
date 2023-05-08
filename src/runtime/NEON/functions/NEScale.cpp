@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,111 +23,192 @@
  */
 #include "arm_compute/runtime/NEON/functions/NEScale.h"
 
-#include "src/common/utils/Log.h"
+#include "arm_compute/core/Coordinates.h"
+#include "arm_compute/core/Error.h"
+#include "arm_compute/core/Helpers.h"
+#include "arm_compute/core/ITensor.h"
+#include "arm_compute/core/PixelValue.h"
+#include "arm_compute/core/TensorInfo.h"
+#include "arm_compute/core/Window.h"
+#include "arm_compute/runtime/NEON/NEScheduler.h"
+#include "arm_compute/runtime/TensorAllocator.h"
+#include "src/core/NEON/kernels/NEScaleKernel.h"
+
 #include "src/core/utils/ScaleUtils.h"
-#include "src/cpu/operators/CpuScale.h"
+
+#include "support/MemorySupport.h"
+#include "support/Rounding.h"
+
+#include <cmath>
+#include <cstddef>
+#include <utility>
 
 namespace arm_compute
 {
-struct NEScale::Impl
+namespace
 {
-    const ITensor                 *src{ nullptr };
-    ITensor                       *dst{ nullptr };
-    Tensor                         dx{ nullptr };      /**< Element's distance between the X real coordinate and the smallest X following integer */
-    Tensor                         dy{ nullptr };      /**< Element's distance between the Y real coordinate and the smallest Y following integer */
-    Tensor                         offsets{ nullptr }; /**< Offset to access the element with NEAREST interpolation or the top-left element with BILINEAR interpolation in the input tensor */
-    std::unique_ptr<cpu::CpuScale> op{ nullptr };
-};
+void precompute_dx_dy_offsets(ITensor *dx, ITensor *dy, ITensor *offsets, float wr, float hr, SamplingPolicy sampling_policy, bool align_corners)
+{
+    ARM_COMPUTE_ERROR_ON(nullptr == offsets);
+    ARM_COMPUTE_UNUSED(sampling_policy);
+    float sampling_offset = 0.0f;
+    if(sampling_policy == SamplingPolicy::CENTER)
+    {
+        sampling_offset = 0.5f;
+    }
+
+    Window win;
+    win.set(Window::DimX, Window::Dimension(0, offsets->info()->dimension(0), 1));
+    win.set(Window::DimY, Window::Dimension(0, offsets->info()->dimension(1), 1));
+
+    if(dx != nullptr && dy != nullptr)
+    {
+        // Pre-compute the offset and pixel's distance for BILINEAR interpolation
+        Iterator offsets_it(offsets, win);
+        Iterator dx_it(dx, win);
+        Iterator dy_it(dy, win);
+
+        execute_window_loop(win, [&](const Coordinates & id)
+        {
+            const float in_x  = (id.x() + sampling_offset) * wr - sampling_offset;
+            const float in_y  = (id.y() + sampling_offset) * hr - sampling_offset;
+            const int   in_xi = std::floor(in_x);
+            const int   in_yi = std::floor(in_y);
+
+            *reinterpret_cast<int32_t *>(offsets_it.ptr()) = in_xi;
+            *reinterpret_cast<float *>(dx_it.ptr())        = in_x - in_xi;
+            *reinterpret_cast<float *>(dy_it.ptr())        = in_y - in_yi;
+        },
+        offsets_it, dx_it, dy_it);
+    }
+    else
+    {
+        // Pre-compute the offset for NEAREST interpolation
+        Iterator offsets_it(offsets, win);
+
+        execute_window_loop(win, [&](const Coordinates & id)
+        {
+            const float float_in_xi                        = (id.x() + sampling_offset) * wr;
+            const auto  in_xi                              = static_cast<size_t>(align_corners ? arm_compute::utils::rounding::round_half_away_from_zero(float_in_xi) : std::floor(float_in_xi));
+            *reinterpret_cast<int32_t *>(offsets_it.ptr()) = in_xi;
+        },
+        offsets_it);
+    }
+}
+} // namespace
 
 NEScale::NEScale()
-    : _impl(std::make_unique<Impl>())
+    : _offsets(), _dx(), _dy()
 {
 }
-NEScale::~NEScale() = default;
 
 void NEScale::configure(ITensor *input, ITensor *output, const ScaleKernelInfo &info)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, output, info);
+    ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
+    ARM_COMPUTE_ERROR_THROW_ON(NEScale::validate(input->info(), output->info(), info));
 
-    _impl->src = input;
-    _impl->dst = output;
-    _impl->op  = std::make_unique<cpu::CpuScale>();
-    _impl->op->configure(input->info(), output->info(), info);
+    const bool is_align_corners_used = info.align_corners && arm_compute::scale_utils::is_align_corners_allowed_sampling_policy(info.sampling_policy);
 
-    // Configure for size of allocation of internal tensors
     // Get data layout and width/height indices
-    const DataLayout data_layout = info.data_layout == DataLayout::UNKNOWN ? input->info()->data_layout() : info.data_layout;
+    const DataLayout data_layout = input->info()->data_layout();
     const int        idx_width   = get_data_layout_dimension_index(data_layout, DataLayoutDimension::WIDTH);
     const int        idx_height  = get_data_layout_dimension_index(data_layout, DataLayoutDimension::HEIGHT);
-
-    // Compute the ratio between source width/height and destination width/height
-    const bool is_align_corners_used = info.align_corners && arm_compute::scale_utils::is_align_corners_allowed_sampling_policy(info.sampling_policy);
-    const auto wr                    = arm_compute::scale_utils::calculate_resize_ratio(input->info()->dimension(idx_width), output->info()->dimension(idx_width), is_align_corners_used);
-    const auto hr                    = arm_compute::scale_utils::calculate_resize_ratio(input->info()->dimension(idx_height), output->info()->dimension(idx_height), is_align_corners_used);
-
-    // Area interpolation behaves as Nearest Neighbour in case of up-sampling
-    InterpolationPolicy policy_to_use = (info.interpolation_policy == InterpolationPolicy::AREA && wr <= 1.f && hr <= 1.f) ? InterpolationPolicy::NEAREST_NEIGHBOR : info.interpolation_policy;
 
     // Get the tensor shape
     TensorShape shape(output->info()->dimension(idx_width));
     shape.set(1, output->info()->dimension(idx_height), false);
 
-    bool precompute_indices_weights = arm_compute::scale_utils::is_precomputation_required(data_layout, input->info()->data_type(), policy_to_use, info.border_mode);
+    // Compute the ratio between source width/height and destination width/height
+    const auto wr = arm_compute::scale_utils::calculate_resize_ratio(input->info()->dimension(idx_width), output->info()->dimension(idx_width), is_align_corners_used);
+    const auto hr = arm_compute::scale_utils::calculate_resize_ratio(input->info()->dimension(idx_height), output->info()->dimension(idx_height), is_align_corners_used);
 
-    if(precompute_indices_weights)
+    // Area interpolation behaves as Nearest Neighbour in case of up-sampling
+    const auto policy_to_use = (info.interpolation_policy == InterpolationPolicy::AREA && wr <= 1.f && hr <= 1.f) ? InterpolationPolicy::NEAREST_NEIGHBOR : info.interpolation_policy;
+
+    auto scale_kernel = arm_compute::support::cpp14::make_unique<NEScaleKernel>();
+    switch(policy_to_use)
     {
-        const TensorInfo tensor_info_dxdy(shape, Format::F32);
-        const TensorInfo tensor_info_offsets(shape, Format::S32);
-
-        _impl->dx.allocator()->init(tensor_info_dxdy);
-        _impl->dy.allocator()->init(tensor_info_dxdy);
-        _impl->offsets.allocator()->init(tensor_info_offsets);
-        switch(policy_to_use)
+        case InterpolationPolicy::NEAREST_NEIGHBOR:
         {
-            case InterpolationPolicy::NEAREST_NEIGHBOR:
-            {
-                // Allocate once the configure methods have been called
-                _impl->offsets.allocator()->allocate();
-                break;
-            }
-            case InterpolationPolicy::BILINEAR:
-            {
-                // Allocate once the configure methods have been called
-                _impl->dx.allocator()->allocate();
-                _impl->dy.allocator()->allocate();
-                _impl->offsets.allocator()->allocate();
-                break;
-            }
-            case InterpolationPolicy::AREA:
-            {
-                break;
-            }
-            default:
-                ARM_COMPUTE_ERROR("Unsupported interpolation mode");
+            TensorInfo tensor_info_offsets(shape, Format::S32);
+            _offsets.allocator()->init(tensor_info_offsets);
+
+            scale_kernel->configure(input, nullptr, nullptr, &_offsets, output, info);
+
+            // Allocate once the configure methods have been called
+            _offsets.allocator()->allocate();
+
+            // Pre-compute offsets for nearest interpolation
+            precompute_dx_dy_offsets(nullptr, nullptr, &_offsets, wr, hr, info.sampling_policy, is_align_corners_used);
+            break;
         }
-    }
-    else
-    {
-        if(policy_to_use != InterpolationPolicy::NEAREST_NEIGHBOR && policy_to_use != InterpolationPolicy::BILINEAR && policy_to_use != InterpolationPolicy::AREA)
+        case InterpolationPolicy::BILINEAR:
         {
+            TensorInfo tensor_info_offsets(shape, Format::S32);
+            TensorInfo tensor_info_dxdy(shape, Format::F32);
+
+            _offsets.allocator()->init(tensor_info_offsets);
+            _dx.allocator()->init(tensor_info_dxdy);
+            _dy.allocator()->init(tensor_info_dxdy);
+
+            scale_kernel->configure(input, &_dx, &_dy, &_offsets, output, info);
+
+            // Allocate once the configure methods have been called
+            _offsets.allocator()->allocate();
+            _dx.allocator()->allocate();
+            _dy.allocator()->allocate();
+
+            // Pre-compute dx, dy and offsets for bilinear interpolation
+            precompute_dx_dy_offsets(&_dx, &_dy, &_offsets, wr, hr, info.sampling_policy, is_align_corners_used);
+            break;
+        }
+        case InterpolationPolicy::AREA:
+        {
+            scale_kernel->configure(input, nullptr, nullptr, nullptr, output, info);
+            break;
+        }
+        default:
             ARM_COMPUTE_ERROR("Unsupported interpolation mode");
-        }
     }
+    _kernel = std::move(scale_kernel);
 }
 
 Status NEScale::validate(const ITensorInfo *input, const ITensorInfo *output, const ScaleKernelInfo &info)
 {
-    return cpu::CpuScale::validate(input, output, info);
-}
+    ARM_COMPUTE_RETURN_ERROR_ON_NULLPTR(input, output);
+    ARM_COMPUTE_RETURN_ERROR_ON(info.sampling_policy != SamplingPolicy::CENTER && info.sampling_policy != SamplingPolicy::TOP_LEFT);
 
-void NEScale::run()
-{
-    ITensorPack pack;
-    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
-    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
-    pack.add_tensor(TensorType::ACL_INT_0, &_impl->dx);
-    pack.add_tensor(TensorType::ACL_INT_1, &_impl->dy);
-    pack.add_tensor(TensorType::ACL_INT_2, &_impl->offsets);
-    _impl->op->run(pack);
+    ITensorInfo *offsets = nullptr;
+    ITensorInfo *dx      = nullptr;
+    ITensorInfo *dy      = nullptr;
+
+    // Get data layout and width/height indices
+    const DataLayout data_layout = input->data_layout();
+    const int        idx_width   = get_data_layout_dimension_index(data_layout, DataLayoutDimension::WIDTH);
+    const int        idx_height  = get_data_layout_dimension_index(data_layout, DataLayoutDimension::HEIGHT);
+
+    // Get the tensor shape of auxilary buffers
+    const TensorShape shape(output->dimension(idx_width), output->dimension(idx_height));
+
+    TensorInfo tensor_info_offsets(shape, Format::S32);
+    TensorInfo tensor_info_dx(shape, Format::F32);
+    TensorInfo tensor_info_dy(shape, Format::F32);
+
+    switch(info.interpolation_policy)
+    {
+        case InterpolationPolicy::NEAREST_NEIGHBOR:
+            offsets = &tensor_info_offsets;
+            break;
+        case InterpolationPolicy::BILINEAR:
+            offsets = &tensor_info_offsets;
+            dx      = &tensor_info_dx;
+            dy      = &tensor_info_dy;
+            break;
+        default:
+            break;
+    }
+
+    ARM_COMPUTE_RETURN_ON_ERROR(NEScaleKernel::validate(input->clone().get(), dx, dy, offsets, output->clone().get(), info));
+    return Status{};
 }
 } // namespace arm_compute

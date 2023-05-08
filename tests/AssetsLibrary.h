@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -36,7 +36,6 @@
 #include "tests/TensorCache.h"
 #include "tests/Utils.h"
 #include "tests/framework/Exceptions.h"
-#include "utils/Utils.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -406,17 +405,6 @@ public:
     template <typename T, typename DataType>
     void fill_static_values(T &&tensor, const std::vector<DataType> &values) const;
 
-    // Function type to generate a number to fill tensors.
-    template <typename ResultType>
-    using GeneratorFunctionType = std::function<ResultType(void)>;
-    /** Fill a tensor with a value generator function.
-     *
-     * @param[in, out] tensor         To be filled tensor.
-     * @param[in]      generate_value A function that generates values.
-     */
-    template <typename T, typename ResultType>
-    void fill_with_generator(T &&tensor, const GeneratorFunctionType<ResultType> &generate_value) const;
-
 private:
     // Function prototype to convert between image formats.
     using Converter = void (*)(const RawTensor &src, RawTensor &dst);
@@ -424,6 +412,9 @@ private:
     using Extractor = void (*)(const RawTensor &src, RawTensor &dst);
     // Function prototype to load an image file.
     using Loader = RawTensor (*)(const std::string &path);
+    // Function type to generate a number to fill tensors.
+    template <typename ResultType>
+    using GeneratorFunctionType = std::function<ResultType(void)>;
 
     const Converter &get_converter(Format src, Format dst) const;
     const Converter &get_converter(DataType src, Format dst) const;
@@ -467,6 +458,14 @@ private:
      *       is loaded instead.
      */
     const RawTensor &find_or_create_raw_tensor(const std::string &name, Format format, Channel channel) const;
+
+    /** Fill a tensor with a value generator function.
+     *
+     * @param[in, out] tensor         To be filled tensor.
+     * @param[in]      generate_value A function that generates values.
+     */
+    template <typename T, typename ResultType>
+    void fill_with_generator(T &&tensor, const GeneratorFunctionType<ResultType> &generate_value) const;
 
     mutable TensorCache             _cache{};
     mutable arm_compute::Mutex      _format_lock{};
@@ -534,14 +533,12 @@ void AssetsLibrary::fill_borders_with_garbage(T &&tensor, D &&distribution, std:
 template <typename T, typename D>
 void AssetsLibrary::fill_boxes(T &&tensor, D &&distribution, std::random_device::result_type seed_offset) const
 {
-    using DistributionType = typename std::remove_reference<D>::type;
-    using ResultType       = typename DistributionType::result_type;
-
+    using ResultType = typename std::remove_reference<D>::type::result_type;
     std::mt19937   gen(_seed + seed_offset);
     TensorShape    shape(tensor.shape());
     const uint32_t num_boxes = tensor.num_elements() / 4;
     // Iterate over all elements
-    DistributionType size_dist{ ResultType(0.f), ResultType(1.f) };
+    std::uniform_real_distribution<> size_dist(0.f, 1.f);
     for(uint32_t element_idx = 0; element_idx < num_boxes * 4; element_idx += 4)
     {
         const ResultType delta   = size_dist(gen);
@@ -725,7 +722,7 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         case DataType::U8:
         case DataType::QASYMM8:
         {
-            std::uniform_int_distribution<unsigned int> distribution_u8(std::numeric_limits<uint8_t>::lowest(), std::numeric_limits<uint8_t>::max());
+            std::uniform_int_distribution<uint8_t> distribution_u8(std::numeric_limits<uint8_t>::lowest(), std::numeric_limits<uint8_t>::max());
             fill(tensor, distribution_u8, seed_offset);
             break;
         }
@@ -734,7 +731,7 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         case DataType::QSYMM8_PER_CHANNEL:
         case DataType::QASYMM8_SIGNED:
         {
-            std::uniform_int_distribution<int> distribution_s8(std::numeric_limits<int8_t>::lowest(), std::numeric_limits<int8_t>::max());
+            std::uniform_int_distribution<int8_t> distribution_s8(std::numeric_limits<int8_t>::lowest(), std::numeric_limits<int8_t>::max());
             fill(tensor, distribution_s8, seed_offset);
             break;
         }
@@ -778,14 +775,14 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         case DataType::BFLOAT16:
         {
             // It doesn't make sense to check [-inf, inf], so hard code it to a big number
-            arm_compute::utils::uniform_real_distribution_16bit<bfloat16> distribution_bf16{ -1000.f, 1000.f };
+            std::uniform_real_distribution<float> distribution_bf16(-1000.f, 1000.f);
             fill(tensor, distribution_bf16, seed_offset);
             break;
         }
         case DataType::F16:
         {
             // It doesn't make sense to check [-inf, inf], so hard code it to a big number
-            arm_compute::utils::uniform_real_distribution_16bit<half> distribution_f16{ -100.f, 100.f };
+            std::uniform_real_distribution<float> distribution_f16(-100.f, 100.f);
             fill(tensor, distribution_f16, seed_offset);
             break;
         }
@@ -826,20 +823,20 @@ void AssetsLibrary::fill_tensor_uniform_ranged(T                                
         case DataType::U8:
         case DataType::QASYMM8:
         {
-            const auto                          converted_pairs = detail::convert_range_pair<uint32_t>(excluded_range_pairs);
-            RangedUniformDistribution<uint32_t> distribution_u8(std::numeric_limits<uint8_t>::lowest(),
-                                                                std::numeric_limits<uint8_t>::max(),
-                                                                converted_pairs);
+            const auto                         converted_pairs = detail::convert_range_pair<uint8_t>(excluded_range_pairs);
+            RangedUniformDistribution<uint8_t> distribution_u8(std::numeric_limits<uint8_t>::lowest(),
+                                                               std::numeric_limits<uint8_t>::max(),
+                                                               converted_pairs);
             fill(tensor, distribution_u8, seed_offset);
             break;
         }
         case DataType::S8:
         case DataType::QSYMM8:
         {
-            const auto                         converted_pairs = detail::convert_range_pair<int32_t>(excluded_range_pairs);
-            RangedUniformDistribution<int32_t> distribution_s8(std::numeric_limits<int8_t>::lowest(),
-                                                               std::numeric_limits<int8_t>::max(),
-                                                               converted_pairs);
+            const auto                        converted_pairs = detail::convert_range_pair<int8_t>(excluded_range_pairs);
+            RangedUniformDistribution<int8_t> distribution_s8(std::numeric_limits<int8_t>::lowest(),
+                                                              std::numeric_limits<int8_t>::max(),
+                                                              converted_pairs);
             fill(tensor, distribution_s8, seed_offset);
             break;
         }
@@ -883,16 +880,16 @@ void AssetsLibrary::fill_tensor_uniform_ranged(T                                
         case DataType::BFLOAT16:
         {
             // It doesn't make sense to check [-inf, inf], so hard code it to a big number
-            const auto                          converted_pairs = detail::convert_range_pair<bfloat16>(excluded_range_pairs);
-            RangedUniformDistribution<bfloat16> distribution_bf16(bfloat16(-1000.f), bfloat16(1000.f), converted_pairs);
+            const auto                       converted_pairs = detail::convert_range_pair<float>(excluded_range_pairs);
+            RangedUniformDistribution<float> distribution_bf16(-1000.f, 1000.f, converted_pairs);
             fill(tensor, distribution_bf16, seed_offset);
             break;
         }
         case DataType::F16:
         {
             // It doesn't make sense to check [-inf, inf], so hard code it to a big number
-            const auto                      converted_pairs = detail::convert_range_pair<half>(excluded_range_pairs);
-            RangedUniformDistribution<half> distribution_f16(half(-100.f), half(100.f), converted_pairs);
+            const auto                       converted_pairs = detail::convert_range_pair<float>(excluded_range_pairs);
+            RangedUniformDistribution<float> distribution_f16(-100.f, 100.f, converted_pairs);
             fill(tensor, distribution_f16, seed_offset);
             break;
         }
@@ -918,7 +915,7 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         case DataType::QASYMM8:
         {
             ARM_COMPUTE_ERROR_ON(!(std::is_same<uint8_t, D>::value));
-            std::uniform_int_distribution<uint32_t> distribution_u8(low, high);
+            std::uniform_int_distribution<uint8_t> distribution_u8(low, high);
             fill(tensor, distribution_u8, seed_offset);
             break;
         }
@@ -927,7 +924,7 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         case DataType::QASYMM8_SIGNED:
         {
             ARM_COMPUTE_ERROR_ON(!(std::is_same<int8_t, D>::value));
-            std::uniform_int_distribution<int32_t> distribution_s8(low, high);
+            std::uniform_int_distribution<int8_t> distribution_s8(low, high);
             fill(tensor, distribution_s8, seed_offset);
             break;
         }
@@ -976,13 +973,13 @@ void AssetsLibrary::fill_tensor_uniform(T &&tensor, std::random_device::result_t
         }
         case DataType::BFLOAT16:
         {
-            arm_compute::utils::uniform_real_distribution_16bit<bfloat16> distribution_bf16{ float(low), float(high) };
+            std::uniform_real_distribution<float> distribution_bf16(low, high);
             fill(tensor, distribution_bf16, seed_offset);
             break;
         }
         case DataType::F16:
         {
-            arm_compute::utils::uniform_real_distribution_16bit<half> distribution_f16{ float(low), float(high) };
+            std::uniform_real_distribution<float> distribution_f16(low, high);
             fill(tensor, distribution_f16, seed_offset);
             break;
         }

@@ -240,6 +240,7 @@ public:
         {
             arm_compute::graph::Target::NEON,
             arm_compute::graph::Target::CL,
+            arm_compute::graph::Target::GC,
         };
 
         const std::set<arm_compute::DataType> supported_data_types
@@ -336,11 +337,11 @@ inline std::unique_ptr<graph::ITensorAccessor> get_accessor(const TensorParams &
 {
     if(!tensor.npy.empty())
     {
-        return std::make_unique<arm_compute::graph_utils::NumPyBinLoader>(tensor.npy);
+        return arm_compute::support::cpp14::make_unique<arm_compute::graph_utils::NumPyBinLoader>(tensor.npy);
     }
     else
     {
-        return std::make_unique<arm_compute::graph_utils::RandomAccessor>(lower, upper, seed);
+        return arm_compute::support::cpp14::make_unique<arm_compute::graph_utils::RandomAccessor>(lower, upper, seed);
     }
 }
 
@@ -606,17 +607,17 @@ inline std::unique_ptr<graph::ITensorAccessor> get_verify_accessor(ExampleParams
     {
         case DataType::QASYMM8:
         {
-            return std::make_unique<VerifyAccessorT<uint8_t>>(
+            return arm_compute::support::cpp14::make_unique<VerifyAccessorT<uint8_t>>(
                        params);
         }
         case DataType::F16:
         {
-            return std::make_unique<VerifyAccessorT<half>>(
+            return arm_compute::support::cpp14::make_unique<VerifyAccessorT<half>>(
                        params);
         }
         case DataType::F32:
         {
-            return std::make_unique<VerifyAccessorT<float>>(
+            return arm_compute::support::cpp14::make_unique<VerifyAccessorT<float>>(
                        params);
         }
         default:

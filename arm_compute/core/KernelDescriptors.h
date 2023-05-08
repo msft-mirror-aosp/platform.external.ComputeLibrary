@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,7 +26,6 @@
 
 #include "arm_compute/core/PixelValue.h"
 #include "arm_compute/core/Types.h"
-#include "arm_compute/core/experimental/IPostOp.h"
 
 namespace arm_compute
 {
@@ -53,72 +52,60 @@ struct FFTRadixStageKernelInfo
     bool         is_first_stage{ false }; /**< Flags if the FFT kernels is the first stage of a decomposed FFT. */
 };
 
-class ITensorInfo;
 /** Descriptor used by the GEMM kernels */
 struct GEMMKernelInfo
 {
     GEMMKernelInfo() = default;
     GEMMKernelInfo(
-        unsigned int                                   im,
-        unsigned int                                   in,
-        unsigned int                                   ik,
-        unsigned int                                   idepth_output_gemm3d,
-        bool                                           ireinterpret_input_as_3d,
-        bool                                           ibroadcast_bias,
-        bool                                           ifp_mixed_precision,
-        bool                                           ihas_pad_y,
-        ActivationLayerInfo                            iactivation_info,
-        int                                            inmult_transpose1xW_width,
-        int                                            imult_interleave4x4_height,
-        GEMMLHSMatrixInfo                              ilhs_info,
-        GEMMRHSMatrixInfo                              irhs_info,
-        int32_t                                        ina_offset,
-        int32_t                                        inb_offset,
-        const experimental::PostOpList<ITensorInfo *> &ipost_ops = experimental::PostOpList<ITensorInfo *> {})
+        unsigned int        im,
+        unsigned int        in,
+        unsigned int        ik,
+        unsigned int        idepth_output_gemm3d,
+        bool                ireinterpret_input_as_3d,
+        bool                ibroadcast_bias,
+        bool                ifp_mixed_precision,
+        bool                ihas_pad_y,
+        ActivationLayerInfo iactivation_info,
+        int                 inmult_transpose1xW_width,
+        int                 imult_interleave4x4_height,
+        GEMMLHSMatrixInfo   ilhs_info,
+        GEMMRHSMatrixInfo   irhs_info,
+        int32_t             ina_offset,
+        int32_t             inb_offset)
         : m(im), n(in), k(ik), depth_output_gemm3d(idepth_output_gemm3d), reinterpret_input_as_3d(ireinterpret_input_as_3d), broadcast_bias(ibroadcast_bias), fp_mixed_precision(ifp_mixed_precision),
-          has_pad_y(ihas_pad_y), activation_info(iactivation_info), mult_transpose1xW_width(inmult_transpose1xW_width), mult_interleave4x4_height(imult_interleave4x4_height), lhs_info(ilhs_info),
-          rhs_info(irhs_info), a_offset(ina_offset), b_offset(inb_offset), post_ops(ipost_ops)
+          has_pad_y(ihas_pad_y), activation_info(iactivation_info), mult_transpose1xW_width(inmult_transpose1xW_width), mult_interleave4x4_height(imult_interleave4x4_height), lhs_info(ilhs_info), rhs_info(irhs_info),
+          a_offset(ina_offset), b_offset(inb_offset)
     {
     }
 
-    unsigned int                            m{ 0 };                           /**< Number of LHS rows*/
-    unsigned int                            n{ 0 };                           /**< Number of RHS columns*/
-    unsigned int                            k{ 0 };                           /**< Number of LHS columns or RHS rows */
-    unsigned int                            depth_output_gemm3d{ 0 };         /**< Depth of the output tensor in case is reinterpreted as 3D */
-    bool                                    reinterpret_input_as_3d{ false }; /**< Flag used to reinterpret the input as 3D */
-    bool                                    broadcast_bias{ false };          /**< Flag used to broadcast the bias addition */
-    bool                                    fp_mixed_precision{ false };      /**< Flag used to indicate wider accumulators (32 bit instead of 16 for FP16). */
-    bool                                    has_pad_y{ false };               /**< Flag used to indicate if the input/output tensors have internal pad on the y direction */
-    ActivationLayerInfo                     activation_info{};                /**< Activation function to perform after the matrix multiplication */
-    int                                     mult_transpose1xW_width{ 1 };     /**< Multiplication factor for the width of the 1xW transposed block */
-    int                                     mult_interleave4x4_height{ 1 };   /**< Multiplication factor for the height of the 4x4 interleaved block */
-    GEMMLHSMatrixInfo                       lhs_info{};                       /**< LHS matrix information used to retrieve the number of rows processed by each thread */
-    GEMMRHSMatrixInfo                       rhs_info{};                       /**< RHS matrix information used for reshaping the RHS matrix */
-    int32_t                                 a_offset{ 0 };                    /**< Offset to be added to each element of the matrix A */
-    int32_t                                 b_offset{ 0 };                    /**< Offset to be added to each element of the matrix B */
-    GEMMLowpOutputStageInfo                 output_stage{};                   /**< GEMMLowp output stage information */
-    experimental::PostOpList<ITensorInfo *> post_ops{};                       /**< (EXPERIMENTAL_POST_OPS) Specifies a list of post ops to be fused after the main op. Note unsupported post ops would not be executed.
-                                                          *   If specified, automatically disable the @ref activation_info */
+    unsigned int            m{ 0 };                           /**< Number of LHS rows*/
+    unsigned int            n{ 0 };                           /**< Number of RHS columns*/
+    unsigned int            k{ 0 };                           /**< Number of LHS columns or RHS rows */
+    unsigned int            depth_output_gemm3d{ 0 };         /**< Depth of the output tensor in case is reinterpreted as 3D */
+    bool                    reinterpret_input_as_3d{ false }; /**< Flag used to reinterpret the input as 3D */
+    bool                    broadcast_bias{ false };          /**< Flag used to broadcast the bias addition */
+    bool                    fp_mixed_precision{ false };      /**< Flag used to indicate wider accumulators (32 bit instead of 16 for FP16). */
+    bool                    has_pad_y{ false };               /**< Flag used to indicate if the input/output tensors have internal pad on the y direction */
+    ActivationLayerInfo     activation_info{};                /**< Activation function to perform after the matrix multiplication */
+    int                     mult_transpose1xW_width{ 1 };     /**< Multiplication factor for the width of the 1xW transposed block */
+    int                     mult_interleave4x4_height{ 1 };   /**< Multiplication factor for the height of the 4x4 interleaved block */
+    GEMMLHSMatrixInfo       lhs_info{};                       /**< LHS matrix information used to retrieve the number of rows processed by each thread */
+    GEMMRHSMatrixInfo       rhs_info{};                       /**< RHS matrix information used for reshaping the RHS matrix */
+    int32_t                 a_offset{ 0 };                    /**< Offset to be added to each element of the matrix A */
+    int32_t                 b_offset{ 0 };                    /**< Offset to be added to each element of the matrix B */
+    GEMMLowpOutputStageInfo output_stage{};                   /**< GEMMLowp output stage information */
 };
 
-/** Compute descriptor used by the depthwise convolution native kernel */
-struct DWCComputeKernelInfo
+/** Descriptor used by the depthwise convolution kernels */
+struct DWCKernelInfo
 {
-    unsigned int n0{ 1 };                             /**< Number of columns processed by each thread */
-    unsigned int m0{ 1 };                             /**< Number of rows processed by each thread */
-    bool         export_input_to_cl_image{ false };   /**< Export input to cl_image */
-    bool         export_weights_to_cl_image{ false }; /**< Export the weights to cl_image */
+    ActivationLayerInfo activation_info{}; /**< Activation function to perform after the depthwise convolution */
 };
 
-/** Compute descriptor used by the direct convolution kernel */
-struct DirectConvComputeKernelInfo
+/** Descriptor used by the depthwise convolution kernels to retrieve the number of output elements processed by each thread */
+struct DWCWeightsKernelInfo
 {
-    int32_t m0{ 1 };                             /**< Number of rows to be processed by the kernel */
-    int32_t n0{ 1 };                             /**< Number of columns to be processed by the kernel */
-    int32_t k0{ 1 };                             /**< Number of partial accumulations to be processed in a single iteration by the kernel */
-    bool    export_weights_to_cl_image{ false }; /**< Flag to export the weights to cl_image */
-    bool    export_output_to_cl_image{ false };  /**< Flag to export the output to cl_image */
-    bool    export_input_to_cl_image{ false };   /**< Flag to export the input to cl_image */
+    unsigned int n0{ 0 }; /**< Number of columns processed by each thread */
 };
 
 /** Descriptor used by the softmax kernels */
@@ -127,7 +114,6 @@ struct SoftmaxKernelInfo
     float    beta{ 1.f };                          /**< A scaling factor for the exponent with default value 1.0 */
     bool     is_log{ false };                      /**< Flag used to perform Log Softmax operation */
     DataType input_data_type{ DataType::UNKNOWN }; /**< Input tensor data type */
-    int32_t  axis{ 0 };                            /**< The dimension in which to apply softmax. */
 };
 
 /** Descriptor used by the direct convolution layer output stage kernels */
@@ -196,22 +182,19 @@ struct ScaleKernelInfo
      * @param[in] sampling_policy       (Optional) Sampling policy used by the interpolation. Defaults to @ref SamplingPolicy::CENTER
      * @param[in] use_padding           (Optional) Is padding in use or not. Defaults to true.
      * @param[in] align_corners         (Optional) Align corners of input and output, only affecting bilinear policy with TOP_LEFT sampling policy. Defaults to false.
-     * @param[in] data_layout           (Optional) Data layout used by the layer. Defaults to @ref DataLayout::UNKNOWN
      */
     ScaleKernelInfo(InterpolationPolicy interpolation_policy,
                     BorderMode          border_mode,
                     PixelValue          constant_border_value = PixelValue(),
                     SamplingPolicy      sampling_policy       = SamplingPolicy::CENTER,
                     bool                use_padding           = true,
-                    bool                align_corners         = false,
-                    DataLayout          data_layout           = DataLayout::UNKNOWN) noexcept
+                    bool                align_corners         = false)
         : interpolation_policy{ interpolation_policy },
-    border_mode{ border_mode },
-    constant_border_value{ constant_border_value },
-    sampling_policy{ sampling_policy },
-    use_padding{ use_padding },
-    align_corners{ align_corners },
-    data_layout{ data_layout }
+          border_mode{ border_mode },
+          constant_border_value{ constant_border_value },
+          sampling_policy{ sampling_policy },
+          use_padding{ use_padding },
+          align_corners{ align_corners }
     {
     }
 
@@ -221,7 +204,30 @@ struct ScaleKernelInfo
     SamplingPolicy      sampling_policy;       /**< Sampling policy used by the interpolation. */
     bool                use_padding;           /**< Indication of using padding */
     bool                align_corners;         /**< Align corners of input and output */
-    DataLayout          data_layout;           /**< Data layout to use */
+};
+
+struct ThresholdKernelInfo
+{
+    /** Default constructor */
+    ThresholdKernelInfo() = default;
+    /** Constructor
+     *
+     * @param[in] threshold   Threshold. When the threshold type is RANGE, this is used as the lower threshold.
+     * @param[in] false_value value to set when the condition is not respected.
+     * @param[in] true_value  value to set when the condition is respected.
+     * @param[in] type        Thresholding type. Either RANGE or BINARY.
+     * @param[in] upper       Upper threshold. Only used when the thresholding type is RANGE.
+     */
+    ThresholdKernelInfo(uint8_t threshold, uint8_t false_value, uint8_t true_value, ThresholdType type, uint8_t upper)
+        : threshold(threshold), false_value(false_value), true_value(true_value), type(type), upper(upper)
+    {
+    }
+
+    uint8_t       threshold{ 0 };
+    uint8_t       false_value{ 0 };
+    uint8_t       true_value{ 0 };
+    ThresholdType type{ ThresholdType::BINARY };
+    uint8_t       upper{ 0 };
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_CORE_KERNEL_DESCRIPTORS_H */

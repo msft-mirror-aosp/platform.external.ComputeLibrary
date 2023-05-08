@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -47,8 +47,7 @@ namespace
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 RelativeTolerance<half> tolerance_f16(half(0.2f));
 #endif /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
-RelativeTolerance<float>   tolerance_f32(1e-4f);
-RelativeTolerance<uint8_t> tolerance_qasymm8(1);
+RelativeTolerance<float> tolerance_f32(1e-8f);
 } // namespace
 
 TEST_SUITE(NEON)
@@ -82,7 +81,7 @@ TEST_SUITE(FP16)
 FIXTURE_DATA_TEST_CASE(RunSmall, NEMeanStdDevNormalizationLayerFixture<half>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(datasets::Small2DShapes(),
                        framework::dataset::make("DataType", DataType::F16)),
                        framework::dataset::make("InPlace", { false, true })),
-                       framework::dataset::make("Epsilon", { 1e-3 })))
+                       framework::dataset::make("Epsilon", { 1e-8 })))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f16);
@@ -102,7 +101,7 @@ TEST_SUITE(FP32)
 FIXTURE_DATA_TEST_CASE(RunSmall, NEMeanStdDevNormalizationLayerFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(datasets::Small2DShapes(),
                        framework::dataset::make("DataType", DataType::F32)),
                        framework::dataset::make("InPlace", { false, true })),
-                       framework::dataset::make("Epsilon", { 1e-7 })))
+                       framework::dataset::make("Epsilon", { 1e-8 })))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
@@ -115,25 +114,11 @@ FIXTURE_DATA_TEST_CASE(RunLarge, NEMeanStdDevNormalizationLayerFixture<float>, f
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
 }
-
 TEST_SUITE_END() // FP32
 TEST_SUITE_END() // Float
 
-TEST_SUITE(Quantized)
-TEST_SUITE(QASYMM8)
-FIXTURE_DATA_TEST_CASE(RunSmall, NEMeanStdDevNormalizationLayerFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(datasets::Small2DShapes(),
-                       framework::dataset::make("DataType", DataType::QASYMM8)),
-                       framework::dataset::make("InPlace", { false, true })),
-                       framework::dataset::make("Epsilon", { 1e-7 })))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8);
-}
-TEST_SUITE_END() // Quantized
-TEST_SUITE_END() // QASYMM8
-
 TEST_SUITE_END() // MeanStdNormalizationLayer
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

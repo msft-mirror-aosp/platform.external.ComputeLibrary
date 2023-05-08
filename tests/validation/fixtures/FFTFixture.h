@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,23 +59,8 @@ protected:
     template <typename U>
     void fill(U &&tensor)
     {
-        switch(tensor.data_type())
-        {
-            case DataType::F16:
-            {
-                arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -5.0f, 5.0f };
-                library->fill(tensor, distribution, 0);
-                break;
-            }
-            case DataType::F32:
-            {
-                std::uniform_real_distribution<float> distribution(-5.0f, 5.0f);
-                library->fill(tensor, distribution, 0);
-                break;
-            }
-            default:
-                library->fill_tensor_uniform(tensor, 0);
-        }
+        std::uniform_real_distribution<float> distribution(-5.f, 5.f);
+        library->fill(tensor, distribution, 0);
     }
 
     TensorType compute_target(const TensorShape &shape, DataType data_type)
@@ -88,17 +73,15 @@ protected:
         FunctionType fft;
         fft.configure(&src, &dst, InfoType());
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
-
-        add_padding_x({ &src, &dst });
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src));
@@ -136,45 +119,24 @@ class FFTConvolutionValidationGenericFixture : public framework::Fixture
 public:
     template <typename...>
     void setup(TensorShape input_shape, TensorShape weights_shape, TensorShape bias_shape, TensorShape output_shape, PadStrideInfo info, Size2D dilation,
-               DataType data_type, DataLayout data_layout, ActivationLayerInfo act_info, bool mixed_layout = false)
+               DataType data_type, DataLayout data_layout, ActivationLayerInfo act_info)
     {
-        _mixed_layout = mixed_layout;
-        _data_type    = data_type;
-        _data_layout  = data_layout;
+        _data_type   = data_type;
+        _data_layout = data_layout;
 
         _target    = compute_target(input_shape, weights_shape, bias_shape, output_shape, info, dilation, act_info);
         _reference = compute_reference(input_shape, weights_shape, bias_shape, output_shape, info, dilation, act_info);
     }
 
 protected:
-    void mix_layout(FunctionType &layer, TensorType &src, TensorType &dst)
-    {
-        // Test Multi DataLayout graph cases, when the data layout changes after configure
-        src.info()->set_data_layout(_data_layout == DataLayout::NCHW ? DataLayout::NHWC : DataLayout::NCHW);
-        dst.info()->set_data_layout(_data_layout == DataLayout::NCHW ? DataLayout::NHWC : DataLayout::NCHW);
-
-        // Compute Convolution function
-        layer.run();
-
-        // Reinstating original data layout for the test suite to properly check the values
-        src.info()->set_data_layout(_data_layout);
-        dst.info()->set_data_layout(_data_layout);
-    }
-
     template <typename U>
     void fill(U &&tensor, int i)
     {
         switch(tensor.data_type())
         {
-            case DataType::F16:
-            {
-                arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
-                library->fill(tensor, distribution, i);
-                break;
-            }
             case DataType::F32:
             {
-                std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+                std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
                 library->fill(tensor, distribution, i);
                 break;
             }
@@ -202,16 +164,14 @@ protected:
         TensorType bias    = create_tensor<TensorType>(bias_shape, _data_type, 1, QuantizationInfo(), _data_layout);
         TensorType dst     = create_tensor<TensorType>(output_shape, _data_type, 1, QuantizationInfo(), _data_layout);
 
-        add_padding_x({ &src, &weights, &bias, &dst }, _data_layout);
-
         // Create and configure function
         FunctionType conv;
-        conv.configure(&src, &weights, &bias, &dst, info, act_info, _data_type == DataType::F16);
+        conv.configure(&src, &weights, &bias, &dst, info, act_info);
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(weights.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(bias.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(weights.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(bias.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
@@ -219,25 +179,19 @@ protected:
         bias.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!weights.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!bias.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!weights.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!bias.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src), 0);
         fill(AccessorType(weights), 1);
         fill(AccessorType(bias), 2);
 
-        if(_mixed_layout)
-        {
-            mix_layout(conv, src, dst);
-        }
-        else
-        {
-            // Compute Convolution function
-            conv.run();
-        }
+        // Compute convolution function
+        conv.run();
+
         return dst;
     }
 
@@ -264,10 +218,9 @@ protected:
     SimpleTensor<T> _reference{};
     DataType        _data_type{};
     DataLayout      _data_layout{};
-    bool            _mixed_layout{ false };
 };
 
-template <typename TensorType, typename AccessorType, typename FunctionType, typename T, bool mixed_layout = false>
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
 class FFTConvolutionValidationFixture : public FFTConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>
 {
 public:
@@ -276,7 +229,7 @@ public:
                DataType data_type, DataLayout data_layout, ActivationLayerInfo act_info)
     {
         FFTConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(input_shape, weights_shape, bias_shape, output_shape, info, dilation,
-                                                                                                 data_type, data_layout, act_info, mixed_layout);
+                                                                                                 data_type, data_layout, act_info);
     }
 };
 } // namespace validation

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,8 +27,9 @@
 #include "arm_compute/core/Types.h"
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/core/utils/helpers/tensor_transform.h"
-#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEStridedSliceKernel.h"
+
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -37,12 +38,11 @@ namespace experimental
 void NESlice::configure(const ITensorInfo *input, ITensorInfo *output, const Coordinates &starts, const Coordinates &ends)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input);
-    ARM_COMPUTE_LOG_PARAMS(input, output, starts, ends);
 
     // Get absolute end coordinates
     const int32_t slice_end_mask = arm_compute::helpers::tensor_transform::construct_slice_end_mask(ends);
 
-    auto k = std::make_unique<NEStridedSliceKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<NEStridedSliceKernel>();
     k->configure(input, output, starts, ends, BiStrides(), 0, slice_end_mask, 0);
     _kernel = std::move(k);
 }
@@ -72,7 +72,7 @@ struct NESlice::Impl
 };
 
 NESlice::NESlice()
-    : _impl(std::make_unique<Impl>())
+    : _impl(support::cpp14::make_unique<Impl>())
 {
 }
 NESlice::NESlice(NESlice &&) = default;
@@ -88,7 +88,7 @@ void NESlice::configure(const ITensor *input, ITensor *output, const Coordinates
 {
     _impl->src = input;
     _impl->dst = output;
-    _impl->op  = std::make_unique<experimental::NESlice>();
+    _impl->op  = arm_compute::support::cpp14::make_unique<experimental::NESlice>();
     _impl->op->configure(input->info(), output->info(), starts, ends);
 }
 

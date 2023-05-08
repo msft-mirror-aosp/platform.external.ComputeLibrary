@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2020-2022 Arm Limited.
+* Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -53,9 +53,11 @@ bool update_window_and_padding(Window &win, Ts &&... patterns)
     },
     patterns...);
 
+    bool padding_changed = false;
+
     utility::for_each([&](IAccessWindow & w)
     {
-        w.update_padding_if_needed(win);
+        padding_changed |= w.update_padding_if_needed(win);
     },
     patterns...);
 
@@ -105,17 +107,6 @@ Window calculate_max_window(const ValidRegion &valid_region, const Steps &steps 
 
 /** Calculate the maximum window for a given tensor shape and border setting
  *
- * @param[in] shape       Shape of the tensor space
- * @param[in] steps       (Optional) Number of elements processed for each step.
- * @param[in] skip_border (Optional) If true exclude the border region from the window.
- * @param[in] border_size (Optional) Border size.
- *
- * @return The maximum window the kernel can be executed on.
- */
-Window calculate_max_window(const TensorShape &shape, const Steps &steps = Steps(), bool skip_border = false, BorderSize border_size = BorderSize());
-
-/** Calculate the maximum window for a given tensor shape and border setting
- *
  * @param[in] info        Tensor info object defining the shape of the object for which the window is created.
  * @param[in] steps       (Optional) Number of elements processed for each step.
  * @param[in] skip_border (Optional) If true exclude the border region from the window.
@@ -125,7 +116,7 @@ Window calculate_max_window(const TensorShape &shape, const Steps &steps = Steps
  */
 inline Window calculate_max_window(const ITensorInfo &info, const Steps &steps = Steps(), bool skip_border = false, BorderSize border_size = BorderSize())
 {
-    return calculate_max_window(info.tensor_shape(), steps, skip_border, border_size);
+    return calculate_max_window(info.valid_region(), steps, skip_border, border_size);
 }
 
 /** Calculate the maximum window used by a horizontal kernel for a given tensor shape and border setting
@@ -174,44 +165,6 @@ Window calculate_max_enlarged_window(const ValidRegion &valid_region, const Step
 inline Window calculate_max_enlarged_window(const ITensorInfo &info, const Steps &steps = Steps(), BorderSize border_size = BorderSize())
 {
     return calculate_max_enlarged_window(info.valid_region(), steps, border_size);
-}
-
-/** Calculate the squashed or maximum window for the given tensor shape.
- *
- * If the tensor data resides continuously in the memory, the tensor can be interpreted
- * as 1D array and all the dimensions can be squashed together into the x-dimension.
- * Otherwise, generate the max window for the given tensor shape.
- *
- * @param[in] src Tensor info object defining the shape of the input tensor.
- *
- * @return The maximum window the kernel can be executed on and the preferred split dimension.
- */
-std::pair<Window, size_t> calculate_squashed_or_max_window(const ITensorInfo &src);
-
-/** Calculate the squashed or maximum window for the given tensor shapes.
- *
- * If the tensor data resides continuously in the memory, the tensor can be interpreted
- * as 1D array and all the dimensions can be squashed together into the x-dimension.
- * Otherwise, generate the max window for the given tensor shapes.
- *
- * @param[in] src0 Tensor info object defining the shape of the first input tensor.
- * @param[in] src1 Tensor info object defining the shape of the second input tensor.
- *
- * @return The squashed or maximum window the kernel can be executed on and the preferred split dimension.
- */
-std::pair<Window, size_t> calculate_squashed_or_max_window(const ITensorInfo &src0, const ITensorInfo &src1);
-
-/** Function to compute the shape of output and window for the given inputs
- *
- * @param[in] infos Input tensor informations
- *
- * @return A pair of the shape and window
- */
-template <typename... Shapes>
-std::pair<TensorShape, Window> compute_output_shape_and_window(const Shapes &... shapes)
-{
-    const TensorShape out_shape = TensorShape::broadcast_shape(shapes...);
-    return std::make_pair(out_shape, calculate_max_window(out_shape));
 }
 #endif /* DOXYGEN_SKIP_THIS */
 } // namespace arm_compute

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,7 +35,10 @@ class ITensor;
 class ITensorInfo;
 class NESpaceToDepthLayerKernel;
 
-/** Basic function to run @ref NESpaceToDepthLayerKernel. */
+/** This function calls the following NEON kernels/functions:
+ *
+ *  -# @ref NESpaceToDepthLayerKernel
+ */
 class NESpaceToDepthLayer : public IFunction
 {
 public:
@@ -52,15 +55,6 @@ public:
     /** Default destructor */
     ~NESpaceToDepthLayer();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @param[in]  input       Tensor input. Supported tensor rank: 4. Data types supported: All.
      * @param[out] output      Tensor output. Data types supported: same as @p input
