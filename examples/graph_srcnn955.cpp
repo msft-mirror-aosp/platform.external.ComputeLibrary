@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -78,10 +78,10 @@ public:
         const std::string model_path = "/cnn_data/srcnn955_model/";
 
         // Create a preprocessor object
-        std::unique_ptr<IPreprocessor> preprocessor = std::make_unique<TFPreproccessor>();
+        std::unique_ptr<IPreprocessor> preprocessor = arm_compute::support::cpp14::make_unique<TFPreproccessor>();
 
         // Create input descriptor
-        const TensorShape tensor_shape     = permute_shape(TensorShape(image_width, image_height, 3U, common_params.batches), DataLayout::NCHW, common_params.data_layout);
+        const TensorShape tensor_shape     = permute_shape(TensorShape(image_width, image_height, 3U, 1U), DataLayout::NCHW, common_params.data_layout);
         TensorDescriptor  input_descriptor = TensorDescriptor(tensor_shape, common_params.data_type).set_layout(common_params.data_layout);
 
         // Set weights trained layout
@@ -111,17 +111,15 @@ public:
                   PadStrideInfo(1, 1, 2, 2))
               .set_name("conv3/convolution")
               << ActivationLayer(ActivationLayerInfo(ActivationLayerInfo::ActivationFunction::RELU)).set_name("conv3/Relu")
-              << OutputLayer(std::make_unique<DummyAccessor>(0));
+              << OutputLayer(arm_compute::support::cpp14::make_unique<DummyAccessor>(0));
 
         // Finalize graph
         GraphConfig config;
-        config.num_threads        = common_params.threads;
-        config.use_tuner          = common_params.enable_tuner;
-        config.tuner_mode         = common_params.tuner_mode;
-        config.tuner_file         = common_params.tuner_file;
-        config.mlgo_file          = common_params.mlgo_file;
-        config.use_synthetic_type = arm_compute::is_data_type_quantized(common_params.data_type);
-        config.synthetic_type     = common_params.data_type;
+        config.num_threads      = common_params.threads;
+        config.use_tuner        = common_params.enable_tuner;
+        config.tuner_mode       = common_params.tuner_mode;
+        config.tuner_file       = common_params.tuner_file;
+        config.convert_to_uint8 = (common_params.data_type == DataType::QASYMM8);
 
         graph.finalize(common_params.target, config);
 

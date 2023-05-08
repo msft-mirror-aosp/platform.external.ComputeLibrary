@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -655,6 +655,82 @@ inline bool has_format_vertical_subsampling(Format format)
     return (format == Format::NV12 || format == Format::NV21 || format == Format::IYUV || format == Format::UV88) ? true : false;
 }
 
+/** Separate a 2D convolution into two 1D convolutions
+ *
+ * @param[in]  conv     2D convolution
+ * @param[out] conv_col 1D vertical convolution
+ * @param[out] conv_row 1D horizontal convolution
+ * @param[in]  size     Size of the 2D convolution
+ *
+ * @return true if the separation was successful
+ */
+inline bool separate_matrix(const int16_t *conv, int16_t *conv_col, int16_t *conv_row, uint8_t size)
+{
+    int32_t min_col     = -1;
+    int16_t min_col_val = -1;
+
+    for(int32_t i = 0; i < size; ++i)
+    {
+        if(conv[i] != 0 && (min_col < 0 || abs(min_col_val) > abs(conv[i])))
+        {
+            min_col     = i;
+            min_col_val = conv[i];
+        }
+    }
+
+    if(min_col < 0)
+    {
+        return false;
+    }
+
+    for(uint32_t j = 0; j < size; ++j)
+    {
+        conv_col[j] = conv[min_col + j * size];
+    }
+
+    for(uint32_t i = 0; i < size; i++)
+    {
+        if(static_cast<int>(i) == min_col)
+        {
+            conv_row[i] = 1;
+        }
+        else
+        {
+            int16_t coeff = conv[i] / conv[min_col];
+
+            for(uint32_t j = 1; j < size; ++j)
+            {
+                if(conv[i + j * size] != (conv_col[j] * coeff))
+                {
+                    return false;
+                }
+            }
+
+            conv_row[i] = coeff;
+        }
+    }
+
+    return true;
+}
+
+/** Calculate the scale of the given square matrix
+ *
+ * The scale is the absolute value of the sum of all the coefficients in the matrix.
+ *
+ * @note If the coefficients add up to 0 then the scale is set to 1.
+ *
+ * @param[in] matrix      Matrix coefficients
+ * @param[in] matrix_size Number of elements per side of the square matrix. (Number of coefficients = matrix_size * matrix_size).
+ *
+ * @return The absolute value of the sum of the coefficients if they don't add up to 0, otherwise 1.
+ */
+inline uint32_t calculate_matrix_scale(const int16_t *matrix, unsigned int matrix_size)
+{
+    const size_t size = matrix_size * matrix_size;
+
+    return std::max(1, std::abs(std::accumulate(matrix, matrix + size, 0)));
+}
+
 /** Adjust tensor shape size if width or height are odd for a given multi-planar format. No modification is done for other formats.
  *
  * @note Adding here a few links discussing the issue of odd size and sharing the same solution:
@@ -718,6 +794,117 @@ inline TensorShape calculate_subsampled_shape(const TensorShape &shape, Format f
     return output;
 }
 
+/** Calculate accurary required by the horizontal and vertical convolution computations
+ *
+ * @param[in] conv_col Pointer to the vertical vector of the separated convolution filter
+ * @param[in] conv_row Pointer to the horizontal vector of the convolution filter
+ * @param[in] size     Number of elements per vector of the separated matrix
+ *
+ * @return The return type is a pair. The first element of the pair is the biggest data type needed for the first stage. The second
+ * element of the pair is the biggest data type needed for the second stage.
+ */
+inline std::pair<DataType, DataType> data_type_for_convolution(const int16_t *conv_col, const int16_t *conv_row, size_t size)
+{
+    DataType first_stage  = DataType::UNKNOWN;
+    DataType second_stage = DataType::UNKNOWN;
+
+    auto gez = [](const int16_t &v)
+    {
+        return v >= 0;
+    };
+
+    auto accu_neg = [](const int &first, const int &second)
+    {
+        return first + (second < 0 ? second : 0);
+    };
+
+    auto accu_pos = [](const int &first, const int &second)
+    {
+        return first + (second > 0 ? second : 0);
+    };
+
+    const bool only_positive_coefficients = std::all_of(conv_row, conv_row + size, gez) && std::all_of(conv_col, conv_col + size, gez);
+
+    if(only_positive_coefficients)
+    {
+        const int max_row_value = std::accumulate(conv_row, conv_row + size, 0) * UINT8_MAX;
+        const int max_value     = std::accumulate(conv_col, conv_col + size, 0) * max_row_value;
+
+        first_stage = (max_row_value <= UINT16_MAX) ? DataType::U16 : DataType::S32;
+
+        second_stage = (max_value <= UINT16_MAX) ? DataType::U16 : DataType::S32;
+    }
+    else
+    {
+        const int min_row_value  = std::accumulate(conv_row, conv_row + size, 0, accu_neg) * UINT8_MAX;
+        const int max_row_value  = std::accumulate(conv_row, conv_row + size, 0, accu_pos) * UINT8_MAX;
+        const int neg_coeffs_sum = std::accumulate(conv_col, conv_col + size, 0, accu_neg);
+        const int pos_coeffs_sum = std::accumulate(conv_col, conv_col + size, 0, accu_pos);
+        const int min_value      = neg_coeffs_sum * max_row_value + pos_coeffs_sum * min_row_value;
+        const int max_value      = neg_coeffs_sum * min_row_value + pos_coeffs_sum * max_row_value;
+
+        first_stage = ((INT16_MIN <= min_row_value) && (max_row_value <= INT16_MAX)) ? DataType::S16 : DataType::S32;
+
+        second_stage = ((INT16_MIN <= min_value) && (max_value <= INT16_MAX)) ? DataType::S16 : DataType::S32;
+    }
+
+    return std::make_pair(first_stage, second_stage);
+}
+
+/** Calculate the accuracy required by the squared convolution calculation.
+ *
+ *
+ * @param[in] conv Pointer to the squared convolution matrix
+ * @param[in] size The total size of the convolution matrix
+ *
+ * @return The return is the biggest data type needed to do the convolution
+ */
+inline DataType data_type_for_convolution_matrix(const int16_t *conv, size_t size)
+{
+    auto gez = [](const int16_t v)
+    {
+        return v >= 0;
+    };
+
+    const bool only_positive_coefficients = std::all_of(conv, conv + size, gez);
+
+    if(only_positive_coefficients)
+    {
+        const int max_conv_value = std::accumulate(conv, conv + size, 0) * UINT8_MAX;
+        if(max_conv_value <= UINT16_MAX)
+        {
+            return DataType::U16;
+        }
+        else
+        {
+            return DataType::S32;
+        }
+    }
+    else
+    {
+        const int min_value = std::accumulate(conv, conv + size, 0, [](int a, int b)
+        {
+            return b < 0 ? a + b : a;
+        })
+        * UINT8_MAX;
+
+        const int max_value = std::accumulate(conv, conv + size, 0, [](int a, int b)
+        {
+            return b > 0 ? a + b : a;
+        })
+        * UINT8_MAX;
+
+        if((INT16_MIN <= min_value) && (INT16_MAX >= max_value))
+        {
+            return DataType::S16;
+        }
+        else
+        {
+            return DataType::S32;
+        }
+    }
+}
+
 /** Permutes the given dimensions according the permutation vector
  *
  * @param[in,out] dimensions Dimensions to be permuted.
@@ -779,37 +966,6 @@ std::pair<unsigned int, unsigned int> scaled_dimensions(int width, int height,
                                                         const PadStrideInfo &pad_stride_info,
                                                         const Size2D        &dilation = Size2D(1U, 1U));
 
-/** Returns calculated width and height of output scaled tensor depending on dimensions rounding mode.
- *
- * @param[in] width           Width of input tensor (Number of columns)
- * @param[in] height          Height of input tensor (Number of rows)
- * @param[in] kernel_width    Kernel width.
- * @param[in] kernel_height   Kernel height.
- * @param[in] pad_stride_info Pad and stride information.
- *
- * @return A pair with the new width in the first position and the new height in the second, returned values can be < 1
- */
-std::pair<int, int> scaled_dimensions_signed(int width, int height,
-                                             int kernel_width, int kernel_height,
-                                             const PadStrideInfo &pad_stride_info);
-
-/** Returns calculated width, height and depth of output scaled tensor depending on dimensions rounding mode.
- *
- * @param[in] width         Width of input tensor
- * @param[in] height        Height of input tensor
- * @param[in] depth         Depth of input tensor
- * @param[in] kernel_width  Kernel width.
- * @param[in] kernel_height Kernel height.
- * @param[in] kernel_depth  Kernel depth.
- * @param[in] pool3d_info   Pad and stride and round information for 3d pooling
- *
- * @return A tuple with the new width in the first position, the new height in the second, and the new depth in the third.
- *         Returned values can be < 1
- */
-std::tuple<int, int, int> scaled_3d_dimensions_signed(int width, int height, int depth,
-                                                      int kernel_width, int kernel_height, int kernel_depth,
-                                                      const Pooling3dLayerInfo &pool3d_info);
-
 /** Check if the given reduction operation should be handled in a serial way.
  *
  * @param[in] op   Reduction operation to perform
@@ -868,6 +1024,13 @@ const std::string &string_from_data_layout(DataLayout dl);
  * @return The string describing the data type.
  */
 const std::string &string_from_data_type(DataType dt);
+/** Convert a matrix pattern into a string.
+ *
+ * @param[in] pattern @ref MatrixPattern to be translated to string.
+ *
+ * @return The string describing the matrix pattern.
+ */
+const std::string &string_from_matrix_pattern(MatrixPattern pattern);
 /** Translates a given activation function to a string.
  *
  * @param[in] act @ref ActivationLayerInfo::ActivationFunction to be translated to string.
@@ -875,6 +1038,13 @@ const std::string &string_from_data_type(DataType dt);
  * @return The string describing the activation function.
  */
 const std::string &string_from_activation_func(ActivationLayerInfo::ActivationFunction act);
+/** Translates a given non linear function to a string.
+ *
+ * @param[in] function @ref NonLinearFilterFunction to be translated to string.
+ *
+ * @return The string describing the non linear function.
+ */
+const std::string &string_from_non_linear_filter_function(NonLinearFilterFunction function);
 /** Translates a given interpolation policy to a string.
  *
  * @param[in] policy @ref InterpolationPolicy to be translated to string.
@@ -903,30 +1073,6 @@ const std::string &string_from_norm_type(NormType type);
  * @return The string describing the pooling type.
  */
 const std::string &string_from_pooling_type(PoolingType type);
-/** Check if the pool region is entirely outside the input tensor
- *
- * @param[in] info @ref PoolingLayerInfo to be checked.
- *
- * @return True if the pool region is entirely outside the input tensor, False otherwise.
- */
-bool is_pool_region_entirely_outside_input(const PoolingLayerInfo &info);
-/** Check if the 3d pool region is entirely outside the input tensor
- *
- * @param[in] info @ref Pooling3dLayerInfo to be checked.
- *
- * @return True if the pool region is entirely outside the input tensor, False otherwise.
- */
-bool is_pool_3d_region_entirely_outside_input(const Pooling3dLayerInfo &info);
-/** Check if the 3D padding is symmetric i.e. padding in each opposite sides are euqal (left=right, top=bottom and front=back)
- *
- * @param[in] info @ref Padding3D input 3D padding object to check if it is symmetric
- *
- * @return True if padding is symmetric
- */
-inline bool is_symmetric(const Padding3D& info)
-{
-    return ((info.left == info.right) && (info.top == info.bottom) && (info.front == info.back));
-}
 /** Translates a given GEMMLowp output stage to a string.
  *
  * @param[in] output_stage @ref GEMMLowpOutputStageInfo to be translated to string.
@@ -992,14 +1138,6 @@ inline ::std::istream &operator>>(::std::istream &stream, DataType &data_type)
  * @return The lowered string
  */
 std::string lower_string(const std::string &val);
-
-/** Raise a given string to upper case
- *
- * @param[in] val Given string to lower.
- *
- * @return The upper case string
- */
-std::string upper_string(const std::string &val);
 
 /** Check if a given data type is of floating point type
  *
@@ -1165,7 +1303,7 @@ bool check_value_range(T val, DataType dt, QuantizationInfo qinfo = Quantization
         case DataType::U8:
         {
             const auto val_u8 = static_cast<uint8_t>(val);
-            return ((val_u8 == val) && val >= std::numeric_limits<uint8_t>::lowest() && val <= std::numeric_limits<uint8_t>::max());
+            return ((val_u8 == val) && val_u8 >= std::numeric_limits<uint8_t>::lowest() && val_u8 <= std::numeric_limits<uint8_t>::max());
         }
         case DataType::QASYMM8:
         {
@@ -1176,29 +1314,27 @@ bool check_value_range(T val, DataType dt, QuantizationInfo qinfo = Quantization
         case DataType::S8:
         {
             const auto val_s8 = static_cast<int8_t>(val);
-            return ((val_s8 == val) && val >= std::numeric_limits<int8_t>::lowest() && val <= std::numeric_limits<int8_t>::max());
+            return ((val_s8 == val) && val_s8 >= std::numeric_limits<int8_t>::lowest() && val_s8 <= std::numeric_limits<int8_t>::max());
         }
         case DataType::U16:
         {
             const auto val_u16 = static_cast<uint16_t>(val);
-            return ((val_u16 == val) && val >= std::numeric_limits<uint16_t>::lowest() && val <= std::numeric_limits<uint16_t>::max());
+            return ((val_u16 == val) && val_u16 >= std::numeric_limits<uint16_t>::lowest() && val_u16 <= std::numeric_limits<uint16_t>::max());
         }
         case DataType::S16:
         {
             const auto val_s16 = static_cast<int16_t>(val);
-            return ((val_s16 == val) && val >= std::numeric_limits<int16_t>::lowest() && val <= std::numeric_limits<int16_t>::max());
+            return ((val_s16 == val) && val_s16 >= std::numeric_limits<int16_t>::lowest() && val_s16 <= std::numeric_limits<int16_t>::max());
         }
         case DataType::U32:
         {
-            const auto val_d64 = static_cast<double>(val);
             const auto val_u32 = static_cast<uint32_t>(val);
-            return ((val_u32 == val_d64) && val_d64 >= std::numeric_limits<uint32_t>::lowest() && val_d64 <= std::numeric_limits<uint32_t>::max());
+            return ((val_u32 == val) && val_u32 >= std::numeric_limits<uint32_t>::lowest() && val_u32 <= std::numeric_limits<uint32_t>::max());
         }
         case DataType::S32:
         {
-            const auto val_d64 = static_cast<double>(val);
             const auto val_s32 = static_cast<int32_t>(val);
-            return ((val_s32 == val_d64) && val_d64 >= std::numeric_limits<int32_t>::lowest() && val_d64 <= std::numeric_limits<int32_t>::max());
+            return ((val_s32 == val) && val_s32 >= std::numeric_limits<int32_t>::lowest() && val_s32 <= std::numeric_limits<int32_t>::max());
         }
         case DataType::BFLOAT16:
             return (val >= bfloat16::lowest() && val <= bfloat16::max());
@@ -1234,55 +1370,6 @@ inline unsigned int adjust_vec_size(unsigned int vec_size, size_t dim0)
     }
 
     return vec_size;
-}
-
-/** Returns the suffix string of CPU kernel implementation names based on the given data type
- *
- * @param[in] data_type The data type the CPU kernel implemetation uses
- *
- * @return the suffix string of CPU kernel implementations
- */
-inline std::string cpu_impl_dt(const DataType &data_type)
-{
-    std::string ret = "";
-
-    switch(data_type)
-    {
-        case DataType::F32:
-            ret = "fp32";
-            break;
-        case DataType::F16:
-            ret = "fp16";
-            break;
-        case DataType::U8:
-            ret = "u8";
-            break;
-        case DataType::S16:
-            ret = "s16";
-            break;
-        case DataType::S32:
-            ret = "s32";
-            break;
-        case DataType::QASYMM8:
-            ret = "qu8";
-            break;
-        case DataType::QASYMM8_SIGNED:
-            ret = "qs8";
-            break;
-        case DataType::QSYMM16:
-            ret = "qs16";
-            break;
-        case DataType::QSYMM8_PER_CHANNEL:
-            ret = "qp8";
-            break;
-        case DataType::BFLOAT16:
-            ret = "bf16";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("Unsupported.");
-    }
-
-    return ret;
 }
 
 #ifdef ARM_COMPUTE_ASSERTS_ENABLED

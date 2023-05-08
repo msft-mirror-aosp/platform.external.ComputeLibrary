@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,12 +41,27 @@ namespace test
 {
 namespace validation
 {
-/** Synced with tests/validation/dynamic_fusion/gpu/cl/Sub.cpp from the dynamic fusion interface.
- * Please check there for any differences in the coverage
- */
 namespace
 {
 /** Input data sets **/
+const auto ArithmeticSubtractionU8Dataset = combine(combine(framework::dataset::make("DataType", DataType::U8), framework::dataset::make("DataType", DataType::U8)),
+                                                    framework::dataset::make("DataType",
+                                                                             DataType::U8));
+const auto ArithmeticSubtractionQASYMM8Dataset = combine(combine(framework::dataset::make("DataType", DataType::QASYMM8), framework::dataset::make("DataType", DataType::QASYMM8)),
+                                                         framework::dataset::make("DataType",
+                                                                                  DataType::QASYMM8));
+const auto ArithmeticSubtractionQASYMM8SignedDataset = combine(combine(framework::dataset::make("DataType", DataType::QASYMM8_SIGNED), framework::dataset::make("DataType", DataType::QASYMM8_SIGNED)),
+                                                               framework::dataset::make("DataType",
+                                                                                        DataType::QASYMM8_SIGNED));
+const auto ArithmeticSubtractionQSYMM16Dataset = combine(combine(framework::dataset::make("DataType", DataType::QSYMM16), framework::dataset::make("DataType", DataType::QSYMM16)),
+                                                         framework::dataset::make("DataType",
+                                                                                  DataType::QSYMM16));
+const auto ArithmeticSubtractionS16Dataset = combine(combine(framework::dataset::make("DataType", { DataType::U8, DataType::S16 }), framework::dataset::make("DataType", DataType::S16)),
+                                                     framework::dataset::make("DataType", DataType::S16));
+const auto ArithmeticSubtractionFP16Dataset = combine(combine(framework::dataset::make("DataType", DataType::F16), framework::dataset::make("DataType", DataType::F16)),
+                                                      framework::dataset::make("DataType", DataType::F16));
+const auto ArithmeticSubtractionFP32Dataset = combine(combine(framework::dataset::make("DataType", DataType::F32), framework::dataset::make("DataType", DataType::F32)),
+                                                      framework::dataset::make("DataType", DataType::F32));
 const auto EmptyActivationFunctionsDataset = framework::dataset::make("ActivationInfo",
 { ActivationLayerInfo() });
 const auto ActivationFunctionsDataset = framework::dataset::make("ActivationInfo",
@@ -64,19 +79,22 @@ TEST_SUITE(ArithmeticSubtraction)
 // *INDENT-OFF*
 // clang-format off
 DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
-               framework::dataset::make("Input1Info", { TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::F32),
+               framework::dataset::make("Input1Info", { TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
+                                                        TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
                                                         TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),      // Invalid data type combination
                                                         TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::F32),     // Mismatching shapes
                                                       }),
-               framework::dataset::make("Input2Info",{ TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::F32),
+               framework::dataset::make("Input2Info",{ TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
+                                                       TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
                                                        TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::S16),
                                                        TensorInfo(TensorShape(48U, 11U, 2U), 1, DataType::F32),
                                                      })),
-               framework::dataset::make("OutputInfo",{ TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::F32),
+               framework::dataset::make("OutputInfo",{ TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::S16),
+                                                       TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
                                                        TensorInfo(TensorShape(32U, 13U, 2U), 1, DataType::U8),
                                                        TensorInfo(TensorShape(48U, 11U, 2U), 1, DataType::F32),
                                                      })),
-               framework::dataset::make("Expected", { true, false, false})),
+               framework::dataset::make("Expected", { true, true, false, false})),
                input1_info, input2_info, output_info, expected)
 {
     ARM_COMPUTE_EXPECT(bool(CLArithmeticSubtraction::validate(&input1_info.clone()->set_is_resizable(false), &input2_info.clone()->set_is_resizable(false), &output_info.clone()->set_is_resizable(false), ConvertPolicy::WRAP)) == expected, framework::LogLevel::ERRORS);
@@ -141,8 +159,7 @@ using CLArithmeticSubtractionFixture = ArithmeticSubtractionValidationFixture<CL
 
 TEST_SUITE(Integer)
 TEST_SUITE(U8)
-FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<uint8_t>, framework::DatasetMode::ALL, combine(combine(combine(datasets::SmallShapes(), framework::dataset::make("DataType",
-                                                                                                                       DataType::U8)),
+FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<uint8_t>, framework::DatasetMode::ALL, combine(combine(combine(datasets::SmallShapes(), ArithmeticSubtractionU8Dataset),
                                                                                                                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                OutOfPlaceDataSet))
 {
@@ -152,8 +169,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<uint8_t>, framew
 TEST_SUITE_END() // U8
 
 TEST_SUITE(S16)
-FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<int16_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(datasets::SmallShapes(), framework::dataset::make("DataType",
-                                                                                                                     DataType::S16)),
+FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<int16_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(datasets::SmallShapes(), ArithmeticSubtractionS16Dataset),
                                                                                                                      framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                      OutOfPlaceDataSet))
 {
@@ -161,8 +177,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFixture<int16_t>, framew
     validate(CLAccessor(_target), _reference);
 }
 
-FIXTURE_DATA_TEST_CASE(RunLarge, CLArithmeticSubtractionFixture<int16_t>, framework::DatasetMode::NIGHTLY, combine(combine(combine(datasets::LargeShapes(), framework::dataset::make("DataType",
-                                                                                                                   DataType::S16)),
+FIXTURE_DATA_TEST_CASE(RunLarge, CLArithmeticSubtractionFixture<int16_t>, framework::DatasetMode::NIGHTLY, combine(combine(combine(datasets::LargeShapes(), ArithmeticSubtractionS16Dataset),
                                                                                                                    framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                    OutOfPlaceDataSet))
 {
@@ -178,22 +193,11 @@ using CLArithmeticSubtractionQuantizedFixture = ArithmeticSubtractionValidationQ
 TEST_SUITE(Quantized)
 TEST_SUITE(QASYMM8)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionQuantizedFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(combine(combine(datasets::SmallShapes(),
-                       framework::dataset::make("DataType", DataType::QASYMM8)),
+                       ArithmeticSubtractionQASYMM8Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE })),
                        framework::dataset::make("Src0QInfo", { QuantizationInfo(5.f / 255.f, 20) })),
                        framework::dataset::make("Src1QInfo", { QuantizationInfo(2.f / 255.f, 10) })),
                        framework::dataset::make("OutQInfo", { QuantizationInfo(1.f / 255.f, 5) })),
-                       OutOfPlaceDataSet))
-{
-    // Validate output
-    validate(CLAccessor(_target), _reference);
-}
-FIXTURE_DATA_TEST_CASE(RunTinyInPlace, CLArithmeticSubtractionQuantizedFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(combine(combine(datasets::TinyShapes(),
-                       framework::dataset::make("DataType", DataType::QASYMM8)),
-                       framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE })),
-                       framework::dataset::make("Src0QInfo", { QuantizationInfo(5.f / 255.f, 20) })),
-                       framework::dataset::make("Src1QInfo", { QuantizationInfo(5.f / 255.f, 20) })),
-                       framework::dataset::make("OutQInfo", { QuantizationInfo(5.f / 255.f, 20) })),
                        InPlaceDataSet))
 {
     // Validate output
@@ -202,12 +206,12 @@ FIXTURE_DATA_TEST_CASE(RunTinyInPlace, CLArithmeticSubtractionQuantizedFixture<u
 TEST_SUITE_END() // QASYMM8
 TEST_SUITE(QASYMM8_SIGNED)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionQuantizedFixture<int8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(combine(combine(datasets::SmallShapes(),
-                       framework::dataset::make("DataType", DataType::QASYMM8_SIGNED)),
+                       ArithmeticSubtractionQASYMM8SignedDataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE })),
                        framework::dataset::make("Src0QInfo", { QuantizationInfo(5.f / 255.f, 10) })),
                        framework::dataset::make("Src1QInfo", { QuantizationInfo(2.f / 255.f, 10) })),
                        framework::dataset::make("OutQInfo", { QuantizationInfo(1.f / 255.f, 5) })),
-                       OutOfPlaceDataSet))
+                       InPlaceDataSet))
 {
     // Validate output
     validate(CLAccessor(_target), _reference);
@@ -215,7 +219,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionQuantizedFixture<int8_t>
 TEST_SUITE_END() // QASYMM8_SIGNED
 TEST_SUITE(QSYMM16)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionQuantizedFixture<int16_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(combine(combine(datasets::SmallShapes(),
-                       framework::dataset::make("DataType", DataType::QSYMM16)),
+                       ArithmeticSubtractionQSYMM16Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE })),
                        framework::dataset::make("Src0QInfo", { QuantizationInfo(1.f / 32768.f, 0), QuantizationInfo(5.f / 32768.f, 0) })),
                        framework::dataset::make("Src1QInfo", { QuantizationInfo(2.f / 32768.f, 0), QuantizationInfo(5.f / 32768.f, 0) })),
@@ -233,8 +237,7 @@ using CLArithmeticSubtractionFloatFixture = ArithmeticSubtractionValidationFloat
 
 TEST_SUITE(Float)
 TEST_SUITE(FP16)
-FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFloatFixture<half>, framework::DatasetMode::ALL, combine(combine(combine(combine(datasets::SmallShapes(), framework::dataset::make("DataType",
-                                                                                                                 DataType::F16)),
+FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFloatFixture<half>, framework::DatasetMode::ALL, combine(combine(combine(combine(datasets::SmallShapes(), ArithmeticSubtractionFP16Dataset),
                                                                                                                  framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                  EmptyActivationFunctionsDataset),
                                                                                                                  OutOfPlaceDataSet))
@@ -243,7 +246,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFloatFixture<half>, fram
     validate(CLAccessor(_target), _reference);
 }
 FIXTURE_DATA_TEST_CASE(RunWithActivation, CLArithmeticSubtractionFloatFixture<half>, framework::DatasetMode::ALL, combine(combine(combine(combine(datasets::TinyShapes(),
-                       framework::dataset::make("DataType", DataType::F16)),
+                       ArithmeticSubtractionFP16Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                        ActivationFunctionsDataset),
                        InPlaceDataSet))
@@ -255,7 +258,7 @@ TEST_SUITE_END() // FP16
 
 TEST_SUITE(FP32)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFloatFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallShapes(),
-                                                                                                                        framework::dataset::make("DataType", DataType::F32)),
+                                                                                                                        ArithmeticSubtractionFP32Dataset),
                                                                                                                         framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                         EmptyActivationFunctionsDataset),
                                                                                                                         OutOfPlaceDataSet))
@@ -264,7 +267,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, CLArithmeticSubtractionFloatFixture<float>, fra
     validate(CLAccessor(_target), _reference);
 }
 FIXTURE_DATA_TEST_CASE(RunWithActivation, CLArithmeticSubtractionFloatFixture<float>, framework::DatasetMode::ALL, combine(combine(combine(combine(datasets::TinyShapes(),
-                       framework::dataset::make("DataType", DataType::F32)),
+                       ArithmeticSubtractionFP32Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                        ActivationFunctionsDataset),
                        InPlaceDataSet))
@@ -274,7 +277,7 @@ FIXTURE_DATA_TEST_CASE(RunWithActivation, CLArithmeticSubtractionFloatFixture<fl
 }
 
 FIXTURE_DATA_TEST_CASE(RunLarge, CLArithmeticSubtractionFloatFixture<float>, framework::DatasetMode::NIGHTLY, combine(combine(combine(combine(datasets::LargeShapes(),
-                                                                                                                      framework::dataset::make("DataType", DataType::F32)),
+                                                                                                                      ArithmeticSubtractionFP32Dataset),
                                                                                                                       framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                                                                                                                       EmptyActivationFunctionsDataset),
                                                                                                                       OutOfPlaceDataSet))
@@ -287,7 +290,7 @@ template <typename T>
 using CLArithmeticSubtractionBroadcastFloatFixture = ArithmeticSubtractionBroadcastValidationFloatFixture<CLTensor, CLAccessor, CLArithmeticSubtraction, T>;
 
 FIXTURE_DATA_TEST_CASE(RunSmallBroadcast, CLArithmeticSubtractionBroadcastFloatFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallShapesBroadcast(),
-                       framework::dataset::make("DataType", DataType::F32)),
+                       ArithmeticSubtractionFP32Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                        EmptyActivationFunctionsDataset),
                        OutOfPlaceDataSet))
@@ -295,18 +298,8 @@ FIXTURE_DATA_TEST_CASE(RunSmallBroadcast, CLArithmeticSubtractionBroadcastFloatF
     // Validate output
     validate(CLAccessor(_target), _reference);
 }
-FIXTURE_DATA_TEST_CASE(RunTinyBroadcastInplace, CLArithmeticSubtractionBroadcastFloatFixture<float>, framework::DatasetMode::PRECOMMIT,
-                       combine(combine(combine(combine(datasets::TinyShapesBroadcastInplace(),
-                                                       framework::dataset::make("DataType", DataType::F32)),
-                                               framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
-                                       EmptyActivationFunctionsDataset),
-                               InPlaceDataSet))
-{
-    // Validate output
-    validate(CLAccessor(_target), _reference);
-}
 FIXTURE_DATA_TEST_CASE(RunWithActivationBroadcast, CLArithmeticSubtractionBroadcastFloatFixture<float>, framework::DatasetMode::ALL, combine(combine(combine(combine(datasets::TinyShapesBroadcast(),
-                       framework::dataset::make("DataType", DataType::F32)),
+                       ArithmeticSubtractionFP32Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                        ActivationFunctionsDataset),
                        OutOfPlaceDataSet))
@@ -316,7 +309,7 @@ FIXTURE_DATA_TEST_CASE(RunWithActivationBroadcast, CLArithmeticSubtractionBroadc
 }
 
 FIXTURE_DATA_TEST_CASE(RunLargeBroadcast, CLArithmeticSubtractionBroadcastFloatFixture<float>, framework::DatasetMode::NIGHTLY, combine(combine(combine(combine(datasets::LargeShapesBroadcast(),
-                       framework::dataset::make("DataType", DataType::F32)),
+                       ArithmeticSubtractionFP32Dataset),
                        framework::dataset::make("ConvertPolicy", { ConvertPolicy::SATURATE, ConvertPolicy::WRAP })),
                        EmptyActivationFunctionsDataset),
                        OutOfPlaceDataSet))

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,6 +35,7 @@ enum class MemoryType
 {
     CPU,
     CL,
+    GLES
 };
 } // namespace experimental
 } // namespace arm_compute

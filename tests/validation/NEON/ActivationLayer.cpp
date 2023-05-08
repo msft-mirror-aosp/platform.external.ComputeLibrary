@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,8 +27,6 @@
 #include "arm_compute/runtime/RuntimeContext.h"
 #include "arm_compute/runtime/Tensor.h"
 #include "arm_compute/runtime/TensorAllocator.h"
-#include "src/common/cpuinfo/CpuIsaInfo.h"
-#include "src/cpu/kernels/CpuActivationKernel.h"
 #include "tests/NEON/Accessor.h"
 #include "tests/PaddingCalculator.h"
 #include "tests/datasets/ActivationFunctionsDataset.h"
@@ -39,7 +37,6 @@
 #include "tests/validation/Validation.h"
 #include "tests/validation/fixtures/ActivationLayerFixture.h"
 
-#include "arm_compute/Acl.hpp"
 #include "support/Requires.h"
 
 namespace arm_compute
@@ -51,7 +48,8 @@ namespace validation
 namespace
 {
 RelativeTolerance<float> tolerance_float_sqrt(0.0001f);
-
+    
+    
 /** Define relative tolerance of the activation layer.
  *
  * @param[in] data_type  The data type used.
@@ -64,34 +62,17 @@ RelativeTolerance<float> relative_tolerance(DataType data_type, ActivationLayerI
     switch(activation)
     {
         case ActivationLayerInfo::ActivationFunction::LOGISTIC:
+        case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
         case ActivationLayerInfo::ActivationFunction::ELU:
         case ActivationLayerInfo::ActivationFunction::SQRT:
         case ActivationLayerInfo::ActivationFunction::TANH:
         case ActivationLayerInfo::ActivationFunction::HARD_SWISH:
-        case ActivationLayerInfo::ActivationFunction::SWISH:
-        case ActivationLayerInfo::ActivationFunction::GELU:
             switch(data_type)
             {
                 case DataType::F16:
-#if defined(ENABLE_SVE)
-                    return RelativeTolerance<float>(0.25f);
-#else  // !defined(ENABLE_SVE)
                     return RelativeTolerance<float>(0.1f);
-#endif // defined(ENABLE_SVE)
                 default:
                     return RelativeTolerance<float>(0.05f);
-            }
-        case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
-            switch(data_type)
-            {
-                case DataType::F16:
-#if defined(ENABLE_SVE)
-                    return RelativeTolerance<float>(0.9f);
-#else  // !defined(ENABLE_SVE)
-                    return RelativeTolerance<float>(0.01f);
-#endif // defined(ENABLE_SVE)
-                default:
-                    return RelativeTolerance<float>(0.00001f);
             }
         default:
             return RelativeTolerance<float>(0.f);
@@ -110,30 +91,14 @@ AbsoluteTolerance<float> absolute_tolerance(DataType data_type, ActivationLayerI
     switch(activation)
     {
         case ActivationLayerInfo::ActivationFunction::LOGISTIC:
+        case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
         case ActivationLayerInfo::ActivationFunction::SQRT:
         case ActivationLayerInfo::ActivationFunction::TANH:
-        case ActivationLayerInfo::ActivationFunction::SWISH:
         case ActivationLayerInfo::ActivationFunction::HARD_SWISH:
             switch(data_type)
             {
                 case DataType::F16:
-#if defined(ENABLE_SVE)
-                    return AbsoluteTolerance<float>(0.25f);
-#else  // !defined(ENABLE_SVE)
                     return AbsoluteTolerance<float>(0.01f);
-#endif // defined(ENABLE_SVE)
-                default:
-                    return AbsoluteTolerance<float>(0.00001f);
-            }
-        case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
-            switch(data_type)
-            {
-                case DataType::F16:
-#if defined(ENABLE_SVE)
-                    return AbsoluteTolerance<float>(0.9f);
-#else  // !defined(ENABLE_SVE)
-                    return AbsoluteTolerance<float>(0.01f);
-#endif // defined(ENABLE_SVE)
                 default:
                     return AbsoluteTolerance<float>(0.00001f);
             }
@@ -142,27 +107,12 @@ AbsoluteTolerance<float> absolute_tolerance(DataType data_type, ActivationLayerI
     }
 }
 
-/** Define absolute tolerance of the activation layer for qasymm8.
- *
- * @param[in] activation The activation function used.
- *
- * @return Absolute tolerance depending on the activation function.
- */
-AbsoluteTolerance<uint8_t> tolerance_qasymm8(ActivationLayerInfo::ActivationFunction activation)
-{
-    switch(activation)
-    {
-        case ActivationLayerInfo::ActivationFunction::LOGISTIC:
-        case ActivationLayerInfo::ActivationFunction::SQRT:
-        case ActivationLayerInfo::ActivationFunction::TANH:
-        case ActivationLayerInfo::ActivationFunction::HARD_SWISH:
-        case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
-        case ActivationLayerInfo::ActivationFunction::LEAKY_RELU:
-            return AbsoluteTolerance<uint8_t>(1);
-        default:
-            return AbsoluteTolerance<uint8_t>(0);
-    }
-}
+/** Tolerance for quantized asymmetric operations */
+#if defined(__aarch64__)
+constexpr AbsoluteTolerance<uint8_t> tolerance_qasymm8(0);
+#else  // defined(__aarch64__)
+constexpr AbsoluteTolerance<uint8_t> tolerance_qasymm8(1);
+#endif // defined(__aarch64__)
 
 constexpr AbsoluteTolerance<int16_t> tolerance_qsymm16(1);
 
@@ -175,13 +125,12 @@ const auto CNNDataTypes = framework::dataset::make("DataType",
     DataType::F32,
 });
 
-const auto NeonActivationFunctionsDataset = concat(datasets::ActivationFunctions(),
-                                                   framework::dataset::make("ActivationFunction", { ActivationLayerInfo::ActivationFunction::HARD_SWISH, ActivationLayerInfo::ActivationFunction::SWISH }));
+const auto NeonActivationFunctionsDataset = concat(datasets::ActivationFunctions(), framework::dataset::make("ActivationFunction", ActivationLayerInfo::ActivationFunction::HARD_SWISH));
 
 /** Input data sets. */
 const auto ActivationDataset = combine(combine(framework::dataset::make("InPlace", { false, true }), NeonActivationFunctionsDataset), framework::dataset::make("AlphaBeta", { 0.5f, 1.f }));
 
-template <typename T, ARM_COMPUTE_REQUIRES_TA(arm_compute::utils::traits::is_floating_point<T>::value)>
+template <typename T, REQUIRES_TA(arm_compute::utils::traits::is_floating_point<T>::value)>
 void test_float_sqrt_boundary_value()
 {
     constexpr auto vector_size = uint32_t{ 16 };
@@ -222,48 +171,6 @@ void test_float_sqrt_boundary_value()
 TEST_SUITE(NEON)
 TEST_SUITE(ActivationLayer)
 
-/** Test case for memory injection in @ref cpu::CpuWinogradConv2d.
- *
- * Configure the operator once and inject memory at run-time in multiple executions.
- *
- * Checks performed in order:
- * - Both runs compute the same output
- */
-TEST_CASE(ActivationAPI, framework::DatasetMode::ALL)
-{
-    acl::StatusCode err = acl::StatusCode::Success;
-
-    // Create context & Queue
-    acl::Context ctx(acl::Target::Cpu, &err);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-
-    acl::Queue queue(ctx, &err);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-
-    // Create activation operator
-    acl::TensorDescriptor src_info({ 2, 3 }, acl::DataType::Float32);
-    acl::TensorDescriptor dst_info({ 2, 3 }, acl::DataType::Float32);
-    acl::ActivationDesc   desc{ AclRelu, 6.f, 0.f, false };
-
-    acl::Activation act(ctx, src_info, dst_info, desc, &err);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-
-    // Create tensors and feed
-    acl::Tensor src(ctx, src_info, &err);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-    acl::Tensor dst(ctx, dst_info, &err);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-
-    acl::TensorPack pack(ctx);
-    err = pack.add(src, ACL_SRC);
-    err = pack.add(dst, ACL_DST);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-
-    // Execute operator
-    err = act.run(queue, pack);
-    ARM_COMPUTE_ASSERT(err == acl::StatusCode::Success);
-}
-
 // *INDENT-OFF*
 // clang-format off
 DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
@@ -284,43 +191,6 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
 {
     bool is_valid = bool(NEActivationLayer::validate(&input_info.clone()->set_is_resizable(false), &output_info.clone()->set_is_resizable(false), act_info));
     ARM_COMPUTE_EXPECT(is_valid == expected, framework::LogLevel::ERRORS);
-}
-
-DATA_TEST_CASE(KernelSelection, framework::DatasetMode::ALL, concat(concat(
-               combine(framework::dataset::make("CpuExt", std::string("NEON")),
-                       framework::dataset::make("DataType", { DataType::F32,
-                                                              DataType::F16,
-                                                              DataType::QASYMM8,
-                                                              DataType::QASYMM8_SIGNED,
-                                                              DataType::QSYMM16
-                                                            })),
-                combine(framework::dataset::make("CpuExt", std::string("SVE")),
-                        framework::dataset::make("DataType", { DataType::F32,
-                                                               DataType::F16,
-                                                             }))),
-                combine(framework::dataset::make("CpuExt", std::string("SVE2")),
-                        framework::dataset::make("DataType", { DataType::QASYMM8,
-                                                               DataType::QASYMM8_SIGNED,
-                                                               DataType::QSYMM16
-                                                             }))),
-               cpu_ext, data_type)
-{
-    using namespace cpu::kernels;
-
-    cpuinfo::CpuIsaInfo cpu_isa{};
-    cpu_isa.neon = (cpu_ext == "NEON");
-    cpu_isa.sve  = (cpu_ext == "SVE");
-    cpu_isa.sve2 = (cpu_ext == "SVE2");
-    cpu_isa.fp16 = (data_type == DataType::F16);
-
-    const auto *selected_impl = CpuActivationKernel::get_implementation(ActivationDataTypeISASelectorData{data_type, CPUModel::GENERIC, cpu_isa,ActivationLayerInfo::ActivationFunction::BOUNDED_RELU}, cpu::KernelSelectionType::Preferred);
-
-    ARM_COMPUTE_ERROR_ON_NULLPTR(selected_impl);
-
-    std::string expected = lower_string(cpu_ext) + "_" + cpu_impl_dt(data_type) + "_activation";
-    std::string actual   = selected_impl->name;
-
-    ARM_COMPUTE_EXPECT_EQUAL(expected, actual, framework::LogLevel::ERRORS);
 }
 // clang-format on
 // *INDENT-ON*
@@ -364,15 +234,12 @@ template <typename T>
 using NEActivationLayerQuantizedFixture = ActivationValidationQuantizedFixture<Tensor, Accessor, NEActivationLayer, T>;
 
 /** Input data sets. */
-const auto QuantizedActivationFunctionsDataset = framework::dataset::make("ActivationFunction",
-{
-    ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU,
-    ActivationLayerInfo::ActivationFunction::RELU,
-    ActivationLayerInfo::ActivationFunction::BOUNDED_RELU,
-    ActivationLayerInfo::ActivationFunction::LOGISTIC,
-    ActivationLayerInfo::ActivationFunction::TANH,
-    ActivationLayerInfo::ActivationFunction::LEAKY_RELU,
-});
+const auto QuantizedActivationFunctionsDataset = framework::dataset::make("ActivationFunction", { ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU,
+                                                                                                  ActivationLayerInfo::ActivationFunction::RELU,
+                                                                                                  ActivationLayerInfo::ActivationFunction::BOUNDED_RELU,
+                                                                                                  ActivationLayerInfo::ActivationFunction::LOGISTIC,
+                                                                                                  ActivationLayerInfo::ActivationFunction::TANH
+                                                                                                });
 
 const auto QuantizedActivationDataset = combine(combine(framework::dataset::make("InPlace", { false }),
                                                         concat(QuantizedActivationFunctionsDataset, framework::dataset::make("ActivationFunction", ActivationLayerInfo::ActivationFunction::HARD_SWISH))),
@@ -386,7 +253,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEActivationLayerQuantizedFixture<uint8_t>, fra
                                                                                                                   framework::dataset::make("QuantizationInfo", { QuantizationInfo(0.1f, 128.0f) })))
 {
     // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8(_function));
+    validate(Accessor(_target), _reference, tolerance_qasymm8);
 }
 TEST_SUITE_END() // QASYMM8
 
@@ -397,17 +264,14 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEActivationLayerQuantizedFixture<int8_t>, fram
                                                                                                                  framework::dataset::make("QuantizationInfo", { QuantizationInfo(0.5f, 10.0f) })))
 {
     // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8(_function));
+    validate(Accessor(_target), _reference, tolerance_qasymm8);
 }
 TEST_SUITE_END() // QASYMM8_SIGNED
 
 /** Input data sets. */
-const auto Int16QuantizedActivationFunctionsDataset = framework::dataset::make("ActivationFunction",
-{
-    ActivationLayerInfo::ActivationFunction::LOGISTIC,
-    ActivationLayerInfo::ActivationFunction::TANH,
-    ActivationLayerInfo::ActivationFunction::LU_BOUNDED_RELU,
-});
+const auto Int16QuantizedActivationFunctionsDataset = framework::dataset::make("ActivationFunction", { ActivationLayerInfo::ActivationFunction::LOGISTIC,
+                                                                                                       ActivationLayerInfo::ActivationFunction::TANH
+                                                                                                     });
 const auto Int16QuantizedActivationDataset = combine(combine(framework::dataset::make("InPlace", { false }), Int16QuantizedActivationFunctionsDataset),
                                                      framework::dataset::make("AlphaBeta", { 0.5f, 1.f }));
 
@@ -424,7 +288,7 @@ TEST_SUITE_END() // QSYMM16
 TEST_SUITE_END() // Quantized
 
 TEST_SUITE_END() // ActivationLayer
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

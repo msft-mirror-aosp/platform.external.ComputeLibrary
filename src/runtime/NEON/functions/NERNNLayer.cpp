@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,14 +30,26 @@
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 #include "arm_compute/runtime/NEON/NEScheduler.h"
-#include "src/common/utils/Log.h"
+#include "src/core/NEON/kernels/NEConvertFullyConnectedWeightsKernel.h"
+#include "src/core/NEON/kernels/NEConvertQuantizedSignednessKernel.h"
+#include "src/core/NEON/kernels/NECopyKernel.h"
+#include "src/core/NEON/kernels/NEFlattenLayerKernel.h"
+#include "src/core/NEON/kernels/NEGEMMInterleave4x4Kernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpMatrixMultiplyKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionOutputStageKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpReductionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMMatrixAdditionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMMatrixMultiplyKernel.h"
+#include "src/core/NEON/kernels/NEGEMMTranspose1xWKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 NERNNLayer::~NERNNLayer() = default;
 
 NERNNLayer::NERNNLayer(std::shared_ptr<IMemoryManager> memory_manager)
-    : _memory_group(std::move(memory_manager)), _gemm_state_f(), _add_f(), _activation(), _fully_connected(memory_manager), _copy_f(), _fully_connected_out(), _gemm_output(), _add_output(),
+    : _memory_group(std::move(memory_manager)), _gemm_state_f(), _add_f(), _activation(), _fully_connected(memory_manager), _copy_kernel(), _fully_connected_out(), _gemm_output(), _add_output(),
       _is_prepared(false)
 {
 }
@@ -74,7 +86,6 @@ void NERNNLayer::configure(const ITensor *input, const ITensor *weights, const I
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, weights, recurrent_weights, bias, hidden_state, output);
     ARM_COMPUTE_ERROR_THROW_ON(NERNNLayer::validate(input->info(), weights->info(), recurrent_weights->info(), bias->info(), hidden_state->info(), output->info(), info));
-    ARM_COMPUTE_LOG_PARAMS(input, weights, recurrent_weights, bias, hidden_state, output, info);
 
     const int   idx_height = get_data_layout_dimension_index(input->info()->data_layout(), DataLayoutDimension::HEIGHT);
     TensorShape shape      = misc::shape_calculator::compute_rnn_shape(recurrent_weights->info(), hidden_state->info()->dimension(idx_height));
@@ -103,7 +114,8 @@ void NERNNLayer::configure(const ITensor *input, const ITensor *weights, const I
     _activation.configure(&_add_output, hidden_state, info);
     _add_output.allocator()->allocate();
 
-    _copy_f.configure(hidden_state, output);
+    _copy_kernel = arm_compute::support::cpp14::make_unique<NECopyKernel>();
+    _copy_kernel->configure(hidden_state, output);
 }
 
 void NERNNLayer::run()
@@ -120,7 +132,7 @@ void NERNNLayer::run()
     _activation.run();
 
     // copy hidden out to output
-    _copy_f.run();
+    NEScheduler::get().schedule(_copy_kernel.get(), Window::DimY);
 }
 
 void NERNNLayer::prepare()

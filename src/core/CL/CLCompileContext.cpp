@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,8 +28,6 @@
 #include "arm_compute/core/Error.h"
 #include "arm_compute/core/Utils.h"
 #include "support/StringSupport.h"
-
-#include <regex>
 
 namespace arm_compute
 {
@@ -72,11 +70,6 @@ void CLBuildOptions::add_options_if(bool cond, const StringSet &options)
 const CLBuildOptions::StringSet &CLBuildOptions::options() const
 {
     return _build_opts;
-}
-
-bool CLBuildOptions::operator==(const CLBuildOptions &other) const
-{
-    return _build_opts == other._build_opts;
 }
 
 Program::Program()
@@ -144,16 +137,15 @@ Kernel::Kernel(std::string name, const cl::Program &program)
 {
 }
 CLCompileContext::CLCompileContext()
-    : _context(), _device(), _programs_map(), _built_programs_map(), _is_wbsm_supported()
+    : _context(), _device(), _programs_map(), _built_programs_map()
 {
 }
 
 CLCompileContext::CLCompileContext(cl::Context context, const cl::Device &device)
-    : _context(), _device(), _programs_map(), _built_programs_map(), _is_wbsm_supported()
+    : _context(), _device(), _programs_map(), _built_programs_map()
 {
-    _context           = std::move(context);
-    _device            = CLDevice(device);
-    _is_wbsm_supported = get_wbsm_support_info(device);
+    _context = std::move(context);
+    _device  = CLDevice(device);
 }
 
 Kernel CLCompileContext::create_kernel(const std::string &kernel_name, const std::string &program_name, const std::string &program_source,
@@ -232,8 +224,6 @@ void CLCompileContext::set_context(cl::Context context)
 std::string CLCompileContext::generate_build_options(const StringSet &build_options_set, const std::string &kernel_path) const
 {
     std::string concat_str;
-    bool        ext_supported = false;
-    std::string ext_buildopts;
 
 #if defined(ARM_COMPUTE_DEBUG_ENABLED)
     // Enable debug properties in CL kernels
@@ -249,7 +239,7 @@ std::string CLCompileContext::generate_build_options(const StringSet &build_opti
         concat_str += " -DARM_COMPUTE_OPENCL_FP16_ENABLED=1 ";
     }
 
-    if(_device.supported("cl_arm_integer_dot_product_int8") || _device.supported("cl_khr_integer_dot_product"))
+    if(_device.supported("cl_arm_integer_dot_product_int8"))
     {
         concat_str += " -DARM_COMPUTE_OPENCL_DOT8_ENABLED=1 ";
     }
@@ -259,20 +249,17 @@ std::string CLCompileContext::generate_build_options(const StringSet &build_opti
         concat_str += " -DARM_COMPUTE_OPENCL_DOT8_ACC_ENABLED=1 ";
     }
 
-    std::tie(ext_supported, ext_buildopts) = _device.is_non_uniform_workgroup_supported();
-
-    if(ext_supported)
+    if(_device.version() == CLVersion::CL20)
     {
-        concat_str += ext_buildopts;
+        concat_str += " -cl-std=CL2.0 ";
+    }
+    else if(_device.supported("cl_arm_non_uniform_work_group_size"))
+    {
+        concat_str += " -cl-arm-non-uniform-work-group-size ";
     }
     else
     {
         ARM_COMPUTE_ERROR("Non uniform workgroup size is not supported!!");
-    }
-
-    if(gpu_arch != GPUTarget::UNKNOWN && gpu_arch != GPUTarget::MIDGARD && get_ddk_version() >= 11)
-    {
-        concat_str += " -DUNROLL_WITH_PRAGMA ";
     }
 
     std::string build_options = stringify_set(build_options_set, kernel_path) + concat_str;
@@ -331,8 +318,7 @@ const cl::Device &CLCompileContext::get_device() const
 
 void CLCompileContext::set_device(cl::Device device)
 {
-    _device            = std::move(device);
-    _is_wbsm_supported = get_wbsm_support_info(device);
+    _device = std::move(device);
 }
 
 cl::NDRange CLCompileContext::default_ndrange() const
@@ -360,11 +346,6 @@ bool CLCompileContext::int64_base_atomics_supported() const
     return _device.supported("cl_khr_int64_base_atomics");
 }
 
-bool CLCompileContext::is_wbsm_supported() const
-{
-    return _is_wbsm_supported;
-}
-
 size_t CLCompileContext::max_local_workgroup_size(const cl::Kernel &kernel) const
 {
     size_t result;
@@ -384,23 +365,5 @@ std::string CLCompileContext::get_device_version() const
 cl_uint CLCompileContext::get_num_compute_units() const
 {
     return _device.compute_units();
-}
-
-int32_t CLCompileContext::get_ddk_version() const
-{
-    const std::string device_version = _device.device_version();
-    const std::regex  ddk_regex("r([0-9]*)p[0-9]");
-    std::smatch       ddk_match;
-
-    if(std::regex_search(device_version, ddk_match, ddk_regex))
-    {
-        return std::stoi(ddk_match[1]);
-    }
-
-    return -1;
-}
-GPUTarget CLCompileContext::get_gpu_target() const
-{
-    return _device.target();
 }
 } // namespace arm_compute

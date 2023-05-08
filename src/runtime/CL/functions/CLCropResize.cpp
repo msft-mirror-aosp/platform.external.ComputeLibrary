@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,11 +25,14 @@
 
 #include "arm_compute/core/CL/CLHelpers.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
+#include "src/core/CL/kernels/CLCopyKernel.h"
+#include "src/core/CL/kernels/CLCropKernel.h"
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
+#include "src/core/CL/kernels/CLMemsetKernel.h"
 #include "src/core/helpers/AutoConfiguration.h"
 #include "src/core/helpers/WindowHelpers.h"
 
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 #include <cstddef>
 
@@ -58,7 +61,7 @@ inline void configure_crop(const ICLTensor *input, ICLTensor *crop_boxes, ICLTen
 } // namespace
 
 CLCropResize::CLCropResize()
-    : _input(nullptr), _boxes(nullptr), _box_ind(nullptr), _output(nullptr), _num_boxes(0), _method(), _extrapolation_value(0), _scale(), _copy(), _crop_results(), _scaled_results(), _internal_functions()
+    : _input(nullptr), _boxes(nullptr), _box_ind(nullptr), _output(nullptr), _num_boxes(0), _method(), _extrapolation_value(0), _scale(), _copy(), _crop_results(), _scaled_results(), _internal_kernels()
 {
 }
 
@@ -72,7 +75,7 @@ Status CLCropResize::validate(const ITensorInfo *input, ITensorInfo *boxes, ITen
     ARM_COMPUTE_RETURN_ERROR_ON(boxes->tensor_shape()[0] != 4);
     ARM_COMPUTE_RETURN_ERROR_ON(boxes->tensor_shape()[1] != box_ind->tensor_shape()[0]);
     TensorInfo temp_info;
-    ARM_COMPUTE_RETURN_ON_ERROR(CLCrop::validate(input->clone().get(), &temp_info, { 0, 0 }, { 1, 1 }, input->dimension(3) - 1, extrapolation_value));
+    ARM_COMPUTE_RETURN_ON_ERROR(CLCropKernel::validate(input->clone().get(), &temp_info, { 0, 0 }, { 1, 1 }, input->dimension(3) - 1, extrapolation_value));
     if(output->total_size() > 0)
     {
         ARM_COMPUTE_RETURN_ERROR_ON_DATA_TYPE_NOT_IN(output, DataType::F32);
@@ -94,7 +97,6 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output, boxes, box_ind);
     ARM_COMPUTE_ERROR_THROW_ON(CLCropResize::validate(input->info(), boxes->info(), box_ind->info(), output->info(), crop_size, method, extrapolation_value));
-    ARM_COMPUTE_LOG_PARAMS(input, boxes, box_ind, output, crop_size, method, extrapolation_value);
 
     TensorShape output_shape = TensorShape(input->info()->tensor_shape()[0], crop_size.x, crop_size.y, boxes->info()->tensor_shape()[1]);
     auto_init_if_empty(*output->info(), output_shape, 1, DataType::F32);
@@ -111,11 +113,11 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
 
     // For each crop box:
     // - The initial cropped image is produced as specified by boxes[i] from the 3D image input[box_ind[i]].
-    //   Possibly using a CLCrop and up to four CLFills.
+    //   Possibly using a CLCropKernel and up to four CLMemsetKernels.
     // - A tensor is required to hold this initial cropped image.
     // - A scale function is used to resize the cropped image to the size specified by crop_size.
     // - A tensor is required to hold the final scaled image before it is copied into the 4D output
-    //   that will hold all final cropped and scaled 3D images using CLCopy.
+    //   that will hold all final cropped and scaled 3D images using CLCopyKernel.
 
     // The contents of _boxes and _box_ind are required to calculate the shape
     // of the initial cropped image and thus are required to configure the
@@ -124,13 +126,13 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
     _box_ind->map(CLScheduler::get().queue());
     for(unsigned int num_box = 0; num_box < _num_boxes; ++num_box)
     {
-        auto       crop_tensor = std::make_unique<CLTensor>();
+        auto       crop_tensor = support::cpp14::make_unique<CLTensor>();
         TensorInfo crop_result_info(1, DataType::F32);
         crop_result_info.set_data_layout(DataLayout::NHWC);
         crop_tensor->allocator()->init(crop_result_info);
         _crop_results.emplace_back(std::move(crop_tensor));
 
-        auto       scale_tensor = std::make_unique<CLTensor>();
+        auto       scale_tensor = support::cpp14::make_unique<CLTensor>();
         TensorInfo scaled_result_info(out_shape, 1, DataType::F32);
         scaled_result_info.set_data_layout(DataLayout::NHWC);
         scale_tensor->allocator()->init(scaled_result_info);
@@ -142,14 +144,14 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
         Coordinates end{};
         configure_crop(_input, _boxes, _box_ind, _crop_results[num_box].get(), num_box, start, end, batch_index);
 
-        auto scale_kernel = std::make_unique<CLScale>();
+        auto scale_kernel = support::cpp14::make_unique<CLScale>();
         scale_kernel->configure(compile_context, _crop_results[num_box].get(), _scaled_results[num_box].get(), ScaleKernelInfo{ _method, BorderMode::CONSTANT, PixelValue(_extrapolation_value), SamplingPolicy::TOP_LEFT });
         _scale.emplace_back(std::move(scale_kernel));
 
         Window win = calculate_max_window(*_output->info());
         win.set(3, Window::Dimension(num_box, num_box + 1, 1));
 
-        auto copy_kernel = std::make_unique<CLCopy>();
+        auto copy_kernel = support::cpp14::make_unique<CLCopyKernel>();
         copy_kernel->configure(compile_context, _scaled_results[num_box].get(), _output, &win);
         _copy.emplace_back(std::move(copy_kernel));
 
@@ -207,10 +209,9 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
         {
             Window slice_fill_rows_before(full_window);
             slice_fill_rows_before.set(2, Window::Dimension(0, rows_out_of_bounds[0], 1));
-            auto kernel = std::make_unique<CLFill>();
+            auto kernel = arm_compute::support::cpp14::make_unique<CLMemsetKernel>();
             kernel->configure(compile_context, _crop_results[num_box].get(), extrapolation_value, &slice_fill_rows_before);
-            //_internal_functions.emplace_back(std::move(kernel));
-            _internal_functions.push_back(std::move(kernel));
+            _internal_kernels.push_back(std::move(kernel));
         }
 
         Window slice_in(full_window);
@@ -225,20 +226,18 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
             {
                 Window slice_fill_cols_before(slice_in);
                 slice_fill_cols_before.set(1, Window::Dimension(0, cols_out_of_bounds[0], 1));
-                auto kernel = std::make_unique<CLFill>();
+                auto kernel = arm_compute::support::cpp14::make_unique<CLMemsetKernel>();
                 kernel->configure(compile_context, _crop_results[num_box].get(), extrapolation_value, &slice_fill_cols_before);
-                //_internal_functions.emplace_back(std::move(kernel));
-                _internal_functions.push_back(std::move(kernel));
+                _internal_kernels.push_back(std::move(kernel));
             }
 
             if(cols_out_of_bounds[1] > 0)
             {
                 Window slice_fill_cols_after(slice_in);
                 slice_fill_cols_after.set(1, Window::Dimension(_crop_results[num_box].get()->info()->dimension(1) - cols_out_of_bounds[1], _crop_results[num_box].get()->info()->dimension(1), 1));
-                auto kernel = std::make_unique<CLFill>();
+                auto kernel = arm_compute::support::cpp14::make_unique<CLMemsetKernel>();
                 kernel->configure(compile_context, _crop_results[num_box].get(), extrapolation_value, &slice_fill_cols_after);
-                //_internal_functions.emplace_back(std::move(kernel));
-                _internal_functions.push_back(std::move(kernel));
+                _internal_kernels.push_back(std::move(kernel));
             }
 
             // Copy all elements within the input bounds from the input tensor.
@@ -249,11 +248,10 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
                                         is_height_flipped ? start[1] - rows_out_of_bounds[0] : start[1] + rows_out_of_bounds[0] };
                 Coordinates2D end_in{ is_width_flipped ? start_in.x - cols_in_bounds + 1 : start_in.x + cols_in_bounds - 1,
                                       is_height_flipped ? start_in.y - rows_in_bounds + 1 : start_in.y + rows_in_bounds - 1 };
-                auto kernel = std::make_unique<CLCrop>();
+                auto kernel = arm_compute::support::cpp14::make_unique<CLCropKernel>();
 
                 kernel->configure(compile_context, _input, _crop_results[num_box].get(), start_in, end_in, batch_index, extrapolation_value, &slice_in);
-                //_internal_functions.emplace_back(std::move(kernel));
-                _internal_functions.push_back(std::move(kernel));
+                _internal_kernels.push_back(std::move(kernel));
             }
         }
 
@@ -262,10 +260,9 @@ void CLCropResize::configure(const CLCompileContext &compile_context, const ICLT
         {
             Window slice_fill_rows_after(full_window);
             slice_fill_rows_after.set(2, Window::Dimension(_crop_results[num_box].get()->info()->dimension(2) - rows_out_of_bounds[1], _crop_results[num_box].get()->info()->dimension(2), 1));
-            auto kernel = std::make_unique<CLFill>();
+            auto kernel = arm_compute::support::cpp14::make_unique<CLMemsetKernel>();
             kernel->configure(compile_context, _crop_results[num_box].get(), extrapolation_value, &slice_fill_rows_after);
-            //_internal_functions.emplace_back(std::move(kernel));
-            _internal_functions.push_back(std::move(kernel));
+            _internal_kernels.push_back(std::move(kernel));
         }
     }
     _boxes->unmap(CLScheduler::get().queue());
@@ -277,9 +274,9 @@ void CLCropResize::run()
 {
     ARM_COMPUTE_ERROR_ON_MSG(_output == nullptr, "Unconfigured function");
 
-    for(unsigned int i = 0; i < _internal_functions.size(); ++i)
+    for(unsigned int i = 0; i < _internal_kernels.size(); ++i)
     {
-        _internal_functions[i]->run();
+        CLScheduler::get().enqueue(*(_internal_kernels[i]));
     }
 
     CLScheduler::get().sync();
@@ -290,7 +287,7 @@ void CLCropResize::run()
     CLScheduler::get().sync();
     for(auto &kernel : _copy)
     {
-        kernel->run();
+        CLScheduler::get().enqueue(*kernel, true);
     }
     CLScheduler::get().sync();
 }

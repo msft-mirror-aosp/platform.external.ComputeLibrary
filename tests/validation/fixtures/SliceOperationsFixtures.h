@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,6 +30,7 @@
 #include "tests/AssetsLibrary.h"
 #include "tests/Globals.h"
 #include "tests/IAccessor.h"
+#include "tests/RawLutAccessor.h"
 #include "tests/framework/Asserts.h"
 #include "tests/framework/Fixture.h"
 #include "tests/validation/Helpers.h"
@@ -69,15 +70,15 @@ protected:
         FunctionType slice;
         slice.configure(&src, &dst, starts, ends);
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src), 0);
@@ -138,15 +139,15 @@ protected:
         FunctionType strided_slice;
         strided_slice.configure(&src, &dst, starts, ends, strides, begin_mask, end_mask, shrink_mask);
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src), 0);

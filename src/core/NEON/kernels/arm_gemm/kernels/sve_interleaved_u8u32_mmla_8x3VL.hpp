@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -10,103 +10,64 @@
  * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 #pragma once
 
-#ifdef ARM_COMPUTE_ENABLE_SVE
+#ifdef __ARM_FEATURE_SVE
+
+#include <cstdint>
 #include "../std_transforms_sve.hpp"
-#include "../performance_parameters.hpp"
 
-#define ARGLIST  \
-    const uint8_t *, const uint8_t *, \
-    uint32_t *, int, int, int
+namespace arm_gemm {
 
-namespace arm_gemm
-{
 // Actual kernel implementations
-void sve_interleaved_u8u32_mmla_8x3VL( ARGLIST );
+void sve_interleaved_u8u32_mmla_8x3VL(const uint8_t *, const uint8_t *, uint32_t *, int, int, int);
 
-class cls_sve_interleaved_u8u32_mmla_8x3VL
-{
+class cls_sve_interleaved_u8u32_mmla_8x3VL {
 public:
     typedef uint8_t operand_type;
     typedef uint32_t result_type;
 
-    typedef void (*kern_type)( ARGLIST );
+    typedef void (*kern_type)(const uint8_t *, const uint8_t *, uint32_t *, int, int, int);
 
     /* Kernel blocking parameters */
-    static constexpr unsigned int out_height()
-    {
-        return 8;
-    }
-
     static unsigned int out_width()
     {
         return get_vector_length<uint32_t>() * 3;
     }
 
-    static unsigned int stripe_width()
-    {
-        return get_vector_length<uint32_t>();
-    }
-
-    static constexpr unsigned int k_unroll()
+    static unsigned int out_height()
     {
         return 8;
     }
 
-
-    StdTransformsSVE<operand_type, result_type, 8, 6, 8, 2> transforms = {};
-    StdTransformsSVE<operand_type, result_type, 8, 6, 8, 2, true> transforms_quantized = {};
-    template<typename T>
-    static inline PerformanceParameters get_performance_parameters(const CPUInfo *ci)
+    static unsigned int k_unroll()
     {
-
-        if (std::is_same<T, uint32_t>::value) {
-            switch (ci->get_cpu_model()) {
-                default:
-                    return { 61.97, 4.11, 7.93 };
-                case CPUModel::A510:
-                    return { 43.18, 3.57, 2.89 };
-                case CPUModel::V1:
-                    return { 123.47, 5.03, 11.76 };
-            }
-        }
-
-
-        if (std::is_same<T, uint8_t>::value) {
-            switch (ci->get_cpu_model()) {
-                default:
-                    return { 62.00, 4.08, 0.51 };
-                case CPUModel::A510:
-                    return { 38.02, 1.85, 0.28 };
-                case CPUModel::V1:
-                    return { 95.28, 7.99, 0.79 };
-            }
-        }
-
-        return { 1.0 };
+        return 8;
     }
 
-    // Default to the generic kernel
+    // Use the standard fixed size transforms.
+    StdTransformsSVE<operand_type, result_type, 8, 6, 8, 2> transforms = {};
+    StdTransformsSVE<operand_type, result_type, 8, 6, 8, 2, true> transforms_quantized = {};
+
     kern_type kernel=sve_interleaved_u8u32_mmla_8x3VL;
+
     cls_sve_interleaved_u8u32_mmla_8x3VL(const CPUInfo *)
     {
+
     }
 };
 
 } // namespace arm_gemm
 
-#undef ARGLIST
-
-#endif // ARM_COMPUTE_ENABLE_SVE
+#endif // __ARM_FEATURE_SVE

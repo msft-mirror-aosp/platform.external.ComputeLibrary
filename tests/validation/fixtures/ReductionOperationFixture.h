@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -61,29 +61,24 @@ protected:
     template <typename U>
     void fill(U &&tensor)
     {
-        if(tensor.data_type() == DataType::F32)
+        if(!is_data_type_quantized(tensor.data_type()))
         {
-            std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+            std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
             library->fill(tensor, distribution, 0);
         }
-        else if(tensor.data_type() == DataType::F16)
-        {
-            arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
-            library->fill(tensor, distribution, 0);
-        }
-        else if(is_data_type_quantized(tensor.data_type()))
+        else
         {
             if(tensor.data_type() == DataType::QASYMM8)
             {
                 std::pair<int, int> bounds = get_quantized_bounds(tensor.quantization_info(), -1.0f, 1.0f);
-                std::uniform_int_distribution<uint32_t> distribution(bounds.first, bounds.second);
+                std::uniform_int_distribution<uint8_t> distribution(bounds.first, bounds.second);
 
                 library->fill(tensor, distribution, 0);
             }
             else if(tensor.data_type() == DataType::QASYMM8_SIGNED)
             {
                 std::pair<int, int> bounds = get_quantized_qasymm8_signed_bounds(tensor.quantization_info(), -1.0f, 1.0f);
-                std::uniform_int_distribution<int32_t> distribution(bounds.first, bounds.second);
+                std::uniform_int_distribution<int8_t> distribution(bounds.first, bounds.second);
 
                 library->fill(tensor, distribution, 0);
             }
@@ -91,10 +86,6 @@ protected:
             {
                 ARM_COMPUTE_ERROR("Not supported");
             }
-        }
-        else
-        {
-            library->fill_tensor_uniform(tensor, 0);
         }
     }
 
@@ -108,15 +99,15 @@ protected:
         FunctionType reduction_func;
         reduction_func.configure(&src, &dst, axis, op, _keep_dims);
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src));

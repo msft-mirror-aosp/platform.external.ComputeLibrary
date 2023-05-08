@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,8 +27,11 @@
 #include "arm_compute/runtime/IFunction.h"
 
 #include "arm_compute/core/Types.h"
+#include "arm_compute/runtime/NEON/INEOperator.h"
+#include "support/Requires.h"
 
 #include <memory>
+#include <vector>
 
 namespace arm_compute
 {
@@ -37,7 +40,13 @@ class ITensor;
 class ITensorInfo;
 class Status;
 
-/** Basic function to execute concatenate tensors along a given axis */
+/** Basic function to execute concatenate tensors along a given axis. This function calls the following kernels:
+ *
+ * -# @ref NEWidthConcatenateLayerKernel (if underlying concatenation axis is 0).
+ * -# @ref NEHeightConcatenateLayerKernel (if underlying concatenation axis is 1).
+ * -# @ref NEDepthConcatenateLayerKernel (if underlying concatenation axis is 2).
+ * -# @ref NEBatchConcatenateLayerKernel (if underlying concatenation axis is 3).
+ */
 class NEConcatenateLayer : public IFunction
 {
 public:
@@ -55,20 +64,8 @@ public:
     NEConcatenateLayer &operator=(NEConcatenateLayer &&);
     /** Initialise the kernel's inputs vector and output.
      *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |QASYMM8        |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED |
-     * |F16            |F16            |
-     * |F32            |F32            |
-     *
      * @note Input and output tensor dimensions preconditions defer depending on the concatenation axis.
-     * @note Preconditions can be found respectively at @ref cpu::kernels::CpuConcatenateWidthKernel, @ref cpu::kernels::CpuConcatenateHeightKernel,
-     *       @ref cpu::kernels::CpuConcatenateDepthKernel and @ref cpu::kernels::CpuConcatenateBatchKernel.
+     * @note Preconditions can be found respectively at @ref NEWidthConcatenateLayerKernel, @ref NEHeightConcatenateLayerKernel and @ref NEDepthConcatenateLayerKernel.
      *
      * @param[in,out] inputs_vector The vectors containing all the tensors to concatenate. Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
      * @param[out]    output        Output tensor. Data types supported: Same as @p input.
@@ -78,8 +75,7 @@ public:
     /** Static function to check if given info will lead to a valid configuration of @ref NEConcatenateLayer
      *
      * @note Input and output tensor dimensions preconditions defer depending on the concatenation axis.
-     * @note Preconditions can be found respectively at @ref cpu::kernels::CpuConcatenateWidthKernel, @ref cpu::kernels::CpuConcatenateHeightKernel,
-     *       @ref cpu::kernels::CpuConcatenateDepthKernel and @ref cpu::kernels::CpuConcatenateBatchKernel.
+     * @note Preconditions can be found respectively at @ref NEWidthConcatenateLayerKernel, @ref NEHeightConcatenateLayerKernel and @ref NEDepthConcatenateLayerKernel.
      *
      * @param[in] inputs_vector The vectors containing all the tensors info to concatenate. Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
      * @param[in] output        Output tensor info. Data types supported: Same as @p input.
@@ -96,5 +92,62 @@ private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
 };
+
+namespace experimental
+{
+/** Basic function to execute concatenate tensors along a given axis. This function calls the following kernels:
+ *
+ * -# @ref NEWidthConcatenateLayerKernel (if underlying concatenation axis is 0).
+ * -# @ref NEHeightConcatenateLayerKernel (if underlying concatenation axis is 1).
+ * -# @ref NEDepthConcatenateLayerKernel (if underlying concatenation axis is 2).
+ * -# @ref NEBatchConcatenateLayerKernel (if underlying concatenation axis is 3).
+ */
+class NEConcatenation : public INEOperator
+{
+public:
+    /** Constructor */
+    NEConcatenation();
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    NEConcatenation(const NEConcatenation &) = delete;
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    NEConcatenation &operator=(const NEConcatenation &) = delete;
+    /** Prevent instances of this class from being moved (As this class contains non movable objects) */
+    NEConcatenation(NEConcatenation &&) = delete;
+    /** Prevent instances of this class from being moved (As this class contains non movable objects) */
+    NEConcatenation &operator=(NEConcatenation &&) = delete;
+    /** Default destructor */
+    ~NEConcatenation() = default;
+    /** Initialise the kernel's inputs vector and output.
+     *
+     * @note Input and output tensor dimensions preconditions defer depending on the concatenation axis.
+     * @note Preconditions can be found respectively at @ref NEWidthConcatenateLayerKernel, @ref NEHeightConcatenateLayerKernel and @ref NEDepthConcatenateLayerKernel.
+     *
+     * @param[in,out] inputs_vector The vectors containing all the tensors to concatenate. Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
+     * @param[out]    output        Output tensor. Data types supported: Same as @p input.
+     * @param[in]     axis          Concatenation axis. Supported underlying concatenation axis are 0, 1, 2 and 3.
+     */
+    void configure(const std::vector<const ITensorInfo *> &inputs_vector, ITensorInfo *output, size_t axis);
+    /** Static function to check if given info will lead to a valid configuration of @ref NEConcatenateLayer
+     *
+     * @note Input and output tensor dimensions preconditions defer depending on the concatenation axis.
+     * @note Preconditions can be found respectively at @ref NEWidthConcatenateLayerKernel, @ref NEHeightConcatenateLayerKernel and @ref NEDepthConcatenateLayerKernel.
+     *
+     * @param[in] inputs_vector The vectors containing all the tensors info to concatenate. Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
+     * @param[in] output        Output tensor info. Data types supported: Same as @p input.
+     * @param[in] axis          Concatenation axis. Supported underlying concatenation axis are 0, 1, 2 and 3.
+     *
+     * @return a status
+     */
+    static Status validate(const std::vector<const ITensorInfo *> &inputs_vector, const ITensorInfo *output, size_t axis);
+
+    // Inherited methods overridden:
+    void run(ITensorPack &tensors) override;
+
+private:
+    std::vector<std::unique_ptr<ICPPKernel>> _concat_kernels;
+    unsigned int                             _num_inputs;
+    unsigned int                             _axis;
+};
+} // namespace experimental
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NECONCATENATELAYER_H */

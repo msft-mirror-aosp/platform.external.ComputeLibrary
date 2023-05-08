@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -100,7 +100,7 @@ TEST_SUITE_END() // FP16
 TEST_SUITE_END() // Float
 
 TEST_SUITE_END() // FlattenLayer
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

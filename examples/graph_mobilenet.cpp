@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -72,7 +72,7 @@ public:
         unsigned int spatial_size = (model_id == 0 || common_params.data_type == DataType::QASYMM8) ? 224 : 160;
 
         // Create input descriptor
-        const TensorShape tensor_shape     = permute_shape(TensorShape(spatial_size, spatial_size, 3U, common_params.batches), DataLayout::NCHW, common_params.data_layout);
+        const TensorShape tensor_shape     = permute_shape(TensorShape(spatial_size, spatial_size, 3U, 1U), DataLayout::NCHW, common_params.data_layout);
         TensorDescriptor  input_descriptor = TensorDescriptor(tensor_shape, common_params.data_type).set_layout(common_params.data_layout);
 
         // Set graph hints
@@ -100,7 +100,6 @@ public:
         config.use_tuner   = common_params.enable_tuner;
         config.tuner_mode  = common_params.tuner_mode;
         config.tuner_file  = common_params.tuner_file;
-        config.mlgo_file   = common_params.mlgo_file;
 
         graph.finalize(common_params.target, config);
 
@@ -125,7 +124,7 @@ private:
         std::string model_path  = (model_id == 0) ? "/cnn_data/mobilenet_v1_1_224_model/" : "/cnn_data/mobilenet_v1_075_160_model/";
 
         // Create a preprocessor object
-        std::unique_ptr<IPreprocessor> preprocessor = std::make_unique<TFPreproccessor>();
+        std::unique_ptr<IPreprocessor> preprocessor = arm_compute::support::cpp14::make_unique<TFPreproccessor>();
 
         // Get trainable parameters data path
         std::string data_path = common_params.data_path;

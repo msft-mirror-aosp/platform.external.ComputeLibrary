@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,54 +23,78 @@
  */
 #include "arm_compute/runtime/NEON/functions/NEPoolingLayer.h"
 
-#include "arm_compute/core/TensorInfo.h"
-#include "arm_compute/core/Validate.h"
-#include "arm_compute/runtime/Tensor.h"
-#include "src/core/helpers/MemoryHelpers.h"
-#include "src/cpu/operators/CpuPool2d.h"
+#include "arm_compute/core/ITensor.h"
+#include "arm_compute/runtime/NEON/NEScheduler.h"
+#include "src/core/NEON/kernels/NEFillBorderKernel.h"
+#include "src/core/NEON/kernels/NEPoolingLayerKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
-struct NEPoolingLayer::Impl
-{
-    ITensor                        *src{ nullptr };
-    ITensor                        *dst{ nullptr };
-    ITensor                        *indices{ nullptr };
-    std::unique_ptr<cpu::CpuPool2d> op{ nullptr };
-    MemoryGroup                     memory_group{};
-    ITensorPack                     run_pack{};
-    WorkspaceData<Tensor>           workspace_tensors{};
-};
-
 NEPoolingLayer::~NEPoolingLayer() = default;
 
-NEPoolingLayer::NEPoolingLayer(std::shared_ptr<IMemoryManager> memory_manager)
-    : _impl(std::make_unique<Impl>())
+NEPoolingLayer::NEPoolingLayer()
+    : _pooling_layer_kernel(), _border_handler(), _is_global_pooling_layer(false), _data_layout(DataLayout::NCHW)
 {
-    _impl->memory_group = MemoryGroup(std::move(memory_manager));
 }
 
 void NEPoolingLayer::configure(ITensor *input, ITensor *output, const PoolingLayerInfo &pool_info, ITensor *indices)
 {
-    _impl->src     = input;
-    _impl->dst     = output;
-    _impl->indices = indices;
-    _impl->op      = std::make_unique<cpu::CpuPool2d>();
-    _impl->op->configure(input->info(), output->info(), pool_info, (indices) ? indices->info() : nullptr);
+    // Check if we have Global Pooling Layer
+    _is_global_pooling_layer = (input->info()->dimension(0) == pool_info.pool_size.width) && (input->info()->dimension(1) == pool_info.pool_size.height);
 
-    _impl->run_pack          = { { TensorType::ACL_SRC, _impl->src }, { TensorType::ACL_DST_0, _impl->dst }, { TensorType::ACL_DST_1, _impl->indices } };
-    _impl->workspace_tensors = manage_workspace<Tensor>(_impl->op->workspace(), _impl->memory_group, _impl->run_pack);
+    // Get data layout
+    _data_layout = pool_info.data_layout == DataLayout::UNKNOWN ? input->info()->data_layout() : pool_info.data_layout;
+
+    // Configure pooling kernel
+    _pooling_layer_kernel = arm_compute::support::cpp14::make_unique<NEPoolingLayerKernel>();
+    _pooling_layer_kernel->configure(input, output, pool_info, indices);
+
+    switch(_data_layout)
+    {
+        case DataLayout::NCHW:
+        {
+            // Configure border depending on operation required (quantize border in case of asymmetric data_type)
+            BorderMode border_mode = (!indices && pool_info.pool_type == PoolingType::MAX) ? BorderMode::REPLICATE : BorderMode::CONSTANT;
+            PixelValue zero_value((indices) ? std::numeric_limits<int>::min() : 0.f);
+            if(is_data_type_quantized_asymmetric(input->info()->data_type()) && !pool_info.exclude_padding)
+            {
+                zero_value = PixelValue(0, input->info()->data_type(), input->info()->quantization_info());
+            }
+            _border_handler = arm_compute::support::cpp14::make_unique<NEFillBorderKernel>();
+            _border_handler->configure(input, _pooling_layer_kernel->border_size(), border_mode, zero_value);
+            break;
+        }
+        case DataLayout::NHWC:
+            break;
+        default:
+            ARM_COMPUTE_ERROR("Data layout not supported");
+    }
 }
 
 Status NEPoolingLayer::validate(const ITensorInfo *input, const ITensorInfo *output, const PoolingLayerInfo &pool_info, const ITensorInfo *indices)
 {
-    return cpu::CpuPool2d::validate(input, output, pool_info, indices);
+    return NEPoolingLayerKernel::validate(input, output, pool_info, indices);
 }
 
 void NEPoolingLayer::run()
 {
-    MemoryGroupResourceScope scope_mg(_impl->memory_group);
-    ARM_COMPUTE_ERROR_ON_NULLPTR(_impl->src, _impl->dst);
-    _impl->op->run(_impl->run_pack);
+    switch(_data_layout)
+    {
+        case DataLayout::NCHW:
+            // Fill border
+            NEScheduler::get().schedule(_border_handler.get(), Window::DimY);
+
+            // Run pooling layer
+            NEScheduler::get().schedule(_pooling_layer_kernel.get(), _is_global_pooling_layer ? Window::DimZ : Window::DimY);
+            break;
+        case DataLayout::NHWC:
+            // Run pooling layer
+            NEScheduler::get().schedule(_pooling_layer_kernel.get(), Window::DimX);
+            break;
+        default:
+            ARM_COMPUTE_ERROR("Data layout not supported");
+    }
 }
+
 } // namespace arm_compute

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,22 +25,23 @@
 
 #include "arm_compute/core/CPP/ICPPKernel.h"
 #include "arm_compute/core/Error.h"
-#include "arm_compute/core/Log.h"
 #include "arm_compute/core/Window.h"
-#include "src/common/cpuinfo/CpuInfo.h"
+#include "src/runtime/CPUUtils.h"
 #include "src/runtime/SchedulerUtils.h"
 
 namespace arm_compute
 {
 IScheduler::IScheduler()
+    : _cpu_info()
 {
+    utils::cpu::get_cpu_configuration(_cpu_info);
     // Work out the best possible number of execution threads
-    _num_threads_hint = cpuinfo::num_threads_hint();
+    _num_threads_hint = utils::cpu::get_threads_hint();
 }
 
 CPUInfo &IScheduler::cpu_info()
 {
-    return CPUInfo::get();
+    return _cpu_info;
 }
 
 void IScheduler::set_num_threads_with_affinity(unsigned int num_threads, BindFunc func)
@@ -54,11 +55,14 @@ unsigned int IScheduler::num_threads_hint() const
     return _num_threads_hint;
 }
 
-void IScheduler::schedule_common(ICPPKernel *kernel, const Hints &hints, const Window &window, ITensorPack &tensors)
+void IScheduler::schedule_common(ICPPKernel *kernel, const Hints &hints, ITensorPack &tensors)
 {
     ARM_COMPUTE_ERROR_ON_MSG(!kernel, "The child class didn't set the kernel");
+    ARM_COMPUTE_UNUSED(kernel);
+    ARM_COMPUTE_UNUSED(hints);
+    ARM_COMPUTE_UNUSED(tensors);
 #ifndef BARE_METAL
-    const Window &max_window = window;
+    const Window &max_window = kernel->window();
     if(hints.split_dimension() == IScheduler::split_dimensions_all)
     {
         /*
@@ -111,7 +115,7 @@ void IScheduler::schedule_common(ICPPKernel *kernel, const Hints &hints, const W
         if(!kernel->is_parallelisable() || num_threads == 1)
         {
             ThreadInfo info;
-            info.cpu_info = &cpu_info();
+            info.cpu_info = &_cpu_info;
             if(tensors.empty())
             {
                 kernel->run(max_window, info);
@@ -139,9 +143,6 @@ void IScheduler::schedule_common(ICPPKernel *kernel, const Hints &hints, const W
                 default:
                     ARM_COMPUTE_ERROR("Unknown strategy");
             }
-            // Make sure the smallest window is larger than minimim workload size
-            num_windows = adjust_num_of_windows(max_window, hints.split_dimension(), num_windows, *kernel, cpu_info());
-
             std::vector<IScheduler::Workload> workloads(num_windows);
             for(unsigned int t = 0; t < num_windows; ++t)
             {
@@ -164,8 +165,6 @@ void IScheduler::schedule_common(ICPPKernel *kernel, const Hints &hints, const W
             run_workloads(workloads);
         }
     }
-#else  /* !BARE_METAL */
-    ARM_COMPUTE_UNUSED(kernel, hints, window, tensors);
 #endif /* !BARE_METAL */
 }
 
@@ -173,39 +172,6 @@ void IScheduler::run_tagged_workloads(std::vector<Workload> &workloads, const ch
 {
     ARM_COMPUTE_UNUSED(tag);
     run_workloads(workloads);
-}
-
-std::size_t IScheduler::adjust_num_of_windows(const Window &window, std::size_t split_dimension, std::size_t init_num_windows, const ICPPKernel &kernel, const CPUInfo &cpu_info)
-{
-    // Mitigation of the narrow split issue, which occurs when the split dimension is too small to split (hence "narrow").
-    if(window.num_iterations(split_dimension) < init_num_windows )
-    {
-        auto recommended_split_dim = Window::DimX;
-        for(std::size_t dims = Window::DimY; dims <= Window::DimW; ++dims)
-        {
-            if(window.num_iterations(recommended_split_dim) < window.num_iterations(dims))
-            {
-                recommended_split_dim = dims;
-            }
-        }
-        ARM_COMPUTE_LOG_INFO_MSG_WITH_FORMAT_CORE("%zu dimension is not a suitable dimension to split the workload. Recommended: %zu recommended_split_dim", split_dimension,
-                                                  recommended_split_dim);
-    }
-
-    for(auto t = init_num_windows; t > 0; --t) // Trying the highest number of windows ,init_num_windows, first
-    {
-        // Try splitting the workload into t, subject to each subworkload size <= mws.
-        if((window.num_iterations(split_dimension) / kernel.get_mws(cpu_info, t)) >= t)
-        {
-            if(t != init_num_windows)
-            {
-                ARM_COMPUTE_LOG_INFO_MSG_CORE("The scheduler is using a different thread count than the one assigned by the user.");
-            }
-            return t;
-        }
-    }
-    ARM_COMPUTE_LOG_INFO_MSG_CORE("The scheduler is using single thread instead of the thread count assigned by the user.");
-    return 1; //  If the workload is so small that it can't be split, we should run a single thread
 }
 
 } // namespace arm_compute

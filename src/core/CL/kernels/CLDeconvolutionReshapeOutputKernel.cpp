@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -113,7 +113,6 @@ CLDeconvolutionReshapeOutputKernel::CLDeconvolutionReshapeOutputKernel()
     : _add_bias(false),
       _bias(nullptr)
 {
-    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLDeconvolutionReshapeOutputKernel::configure(const ICLTensor *input, const ICLTensor *bias, ICLTensor *output, const ITensorInfo *input_info, const ITensorInfo *weights_info,
@@ -129,7 +128,6 @@ void CLDeconvolutionReshapeOutputKernel::configure(const CLCompileContext &compi
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output, input_info, weights_info);
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(input->info(), (bias != nullptr ? bias->info() : nullptr), output->info(), input_info, weights_info, deconv_info));
 
-    auto padding_info = get_padding_info({ input, bias, output });
     // Configure kernel window
     auto win_config = validate_and_configure_window(input->info(), output->info(), input_info, weights_info, deconv_info);
     ARM_COMPUTE_ERROR_THROW_ON(win_config.first);
@@ -175,7 +173,6 @@ void CLDeconvolutionReshapeOutputKernel::configure(const CLCompileContext &compi
     _config_id += support::cpp11::to_string(output->info()->dimension(0));
     _config_id += "_";
     _config_id += support::cpp11::to_string(output->info()->dimension(1));
-    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLDeconvolutionReshapeOutputKernel::validate(const ITensorInfo *input, const ITensorInfo *bias, const ITensorInfo *output, const ITensorInfo *input_info, const ITensorInfo *weights_info,

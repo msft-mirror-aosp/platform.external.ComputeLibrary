@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2018 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -64,20 +64,17 @@ protected:
     template <typename U>
     void fill(U &&tensor, int i)
     {
-        static_assert(std::is_floating_point<T>::value || std::is_same<T, half>::value, "Only floating point data types supported.");
-        using DistributionType = typename std::conditional<std::is_same<T, half>::value, arm_compute::utils::uniform_real_distribution_16bit<T>, std::uniform_real_distribution<T>>::type;
-
-        DistributionType distribution{ T(0.5f), T(1.0f) };
+        std::uniform_real_distribution<> distribution(0.5f, 1.f);
         library->fill(tensor, distribution, i);
     }
 
     TensorType compute_target()
     {
         // Create tensors
-        TensorType w1  = create_tensor<TensorType>(TensorShape(6000U, 15U), DataType::F32, 1);
-        TensorType b1  = create_tensor<TensorType>(TensorShape(15U), DataType::F32, 1);
-        TensorType src = create_tensor<TensorType>(TensorShape(1U, 15U, 400U, _max_batches), DataType::F32, 1);
-        TensorType dst = create_tensor<TensorType>(TensorShape(15U, _max_batches), DataType::F32, 1);
+        TensorType w1  = create_tensor<TensorType>(TensorShape(180000U, 150U), DataType::F32, 1);
+        TensorType b1  = create_tensor<TensorType>(TensorShape(150U), DataType::F32, 1);
+        TensorType src = create_tensor<TensorType>(TensorShape(1U, 150U, 1200U, _max_batches), DataType::F32, 1);
+        TensorType dst = create_tensor<TensorType>(TensorShape(150U, _max_batches), DataType::F32, 1);
 
         // Create and configure function
         FullyConnectedFunction fc_layer_1;
@@ -105,9 +102,9 @@ protected:
         int  diff            = _max_batches - _cur_batches;
         auto new_src_padding = PaddingSize(src_padding.top, src_padding.right, src_padding.bottom + diff, src_padding.left);
         auto new_dst_padding = PaddingSize(dst_padding.top, dst_padding.right, dst_padding.bottom + diff, dst_padding.left);
-        src.allocator()->info().set_tensor_shape(TensorShape(1U, 15U, 400U, _cur_batches)).set_is_resizable(true).extend_padding(new_src_padding);
+        src.allocator()->info().set_tensor_shape(TensorShape(1U, 150U, 1200U, _cur_batches)).set_is_resizable(true).extend_padding(new_src_padding);
         src.allocator()->info().set_is_resizable(false);
-        dst.allocator()->info().set_tensor_shape(TensorShape(15U, _cur_batches)).set_is_resizable(true).extend_padding(new_dst_padding);
+        dst.allocator()->info().set_tensor_shape(TensorShape(150U, _cur_batches)).set_is_resizable(true).extend_padding(new_dst_padding);
         dst.allocator()->info().set_is_resizable(false);
 
         // Configure FC info
@@ -129,16 +126,16 @@ protected:
     SimpleTensor<T> compute_reference()
     {
         // Create reference
-        SimpleTensor<T> w1{ TensorShape(6000U, 15U), DataType::F32 };
-        SimpleTensor<T> b1{ TensorShape(15U), DataType::F32 };
-        SimpleTensor<T> src{ TensorShape(1U, 15U, 400U, _cur_batches), DataType::F32 };
+        SimpleTensor<T> w1{ TensorShape(180000U, 150U), DataType::F32 };
+        SimpleTensor<T> b1{ TensorShape(150U), DataType::F32 };
+        SimpleTensor<T> src{ TensorShape(1U, 150U, 1200U, _cur_batches), DataType::F32 };
 
         // Fill reference
         fill(src, 5);
         fill(w1, 1);
         fill(b1, 2);
 
-        return reference::fully_connected_layer(src, w1, b1, TensorShape(15U, _cur_batches));
+        return reference::fully_connected_layer(src, w1, b1, TensorShape(150U, _cur_batches));
     }
 
 protected:

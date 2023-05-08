@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -82,7 +82,6 @@ constexpr AbsoluteTolerance<int16_t> tolerance_s16(1);
 constexpr float                      tolerance_f32_absolute(0.001f);
 
 RelativeTolerance<float> tolerance_f32(0.05);
-constexpr float          abs_tolerance_f16(0.1f);
 RelativeTolerance<half>  tolerance_f16(half(0.1));
 
 constexpr float tolerance_num_f32(0.01f);
@@ -187,6 +186,16 @@ TEST_CASE(AlignedCornerNotSupported, framework::DatasetMode::ALL)
     ARM_COMPUTE_EXPECT(bool(result) == false, framework::LogLevel::ERRORS);
 }
 
+TEST_CASE(WindowShrink, framework::DatasetMode::ALL)
+{
+    const auto input  = TensorInfo{ TensorShape(37U, 37U, 2U), 1, DataType::F32 };
+    const auto output = TensorInfo{ TensorShape(39U, 55U, 2U), 1, DataType::F32 };
+    Status     result{};
+
+    result = CLScale::validate(&input.clone()->set_is_resizable(false), &output.clone()->set_is_resizable(false), ScaleKernelInfo{ default_interpolation_policy, default_border_mode });
+    ARM_COMPUTE_EXPECT(bool(result) == false, framework::LogLevel::ERRORS);
+}
+
 TEST_CASE(IncorrectScaleFactor, framework::DatasetMode::ALL)
 {
     const auto     input                = TensorInfo{ TensorShape(28U, 33U, 2U), 1, DataType::F32 };
@@ -201,22 +210,11 @@ TEST_SUITE_END() // Validate
 
 template <typename T>
 using CLScaleFixture = ScaleValidationFixture<CLTensor, CLAccessor, CLScale, T>;
-template <typename T>
-using CLScaleMixedDataLayoutFixture = ScaleValidationFixture<CLTensor, CLAccessor, CLScale, T, true>;
 
 TEST_SUITE(Float)
 TEST_SUITE(FP32)
 const auto f32_shape = combine((SCALE_PRECOMMIT_SHAPE_DATASET(num_elements_per_vector<float>())), framework::dataset::make("DataType", DataType::F32));
 FIXTURE_DATA_TEST_CASE(Run, CLScaleFixture<float>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f32_shape, ScaleSamplingPolicySet))
-{
-    //Create valid region
-    TensorInfo        src_info(_shape, 1, _data_type);
-    const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
-
-    // Validate output
-    validate(CLAccessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32, tolerance_f32_absolute);
-}
-FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, CLScaleMixedDataLayoutFixture<float>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f32_shape, ScaleSamplingPolicySet))
 {
     //Create valid region
     TensorInfo        src_info(_shape, 1, _data_type);
@@ -263,7 +261,7 @@ FIXTURE_DATA_TEST_CASE(Run, CLScaleFixture<half>, framework::DatasetMode::ALL, A
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16);
 }
 FIXTURE_DATA_TEST_CASE(RunAlignCorners, CLScaleFixture<half>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f16_shape, ScaleAlignCornersSamplingPolicySet))
 {
@@ -272,7 +270,7 @@ FIXTURE_DATA_TEST_CASE(RunAlignCorners, CLScaleFixture<half>, framework::Dataset
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16);
 }
 const auto f16_nightly_shape = combine((SCALE_NIGHTLY_SHAPE_DATASET(num_elements_per_vector<half>())), framework::dataset::make("DataType", DataType::F16));
 FIXTURE_DATA_TEST_CASE(RunNightly, CLScaleFixture<half>, framework::DatasetMode::NIGHTLY, ASSEMBLE_DATASET(f16_nightly_shape, ScaleSamplingPolicySet))
@@ -282,7 +280,7 @@ FIXTURE_DATA_TEST_CASE(RunNightly, CLScaleFixture<half>, framework::DatasetMode:
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16);
 }
 FIXTURE_DATA_TEST_CASE(RunNightlyAlignCorners, CLScaleFixture<half>, framework::DatasetMode::NIGHTLY, ASSEMBLE_DATASET(f16_nightly_shape, ScaleAlignCornersSamplingPolicySet))
 {
@@ -291,7 +289,7 @@ FIXTURE_DATA_TEST_CASE(RunNightlyAlignCorners, CLScaleFixture<half>, framework::
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+    validate(CLAccessor(_target), _reference, valid_region, tolerance_f16);
 }
 TEST_SUITE_END() // FP16
 TEST_SUITE_END() // Float

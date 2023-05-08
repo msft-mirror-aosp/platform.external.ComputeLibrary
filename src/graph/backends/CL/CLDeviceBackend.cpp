@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -34,6 +34,7 @@
 #include "arm_compute/graph/backends/CL/CLSubTensorHandle.h"
 #include "arm_compute/graph/backends/CL/CLTensorHandle.h"
 
+#include "arm_compute/core/CL/CLCoreRuntimeContext.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/runtime/BlobLifetimeManager.h"
 #include "arm_compute/runtime/CL/CLBufferAllocator.h"
@@ -64,13 +65,17 @@ bool file_exists(const std::string &filename)
 static detail::BackendRegistrar<CLDeviceBackend> CLDeviceBackend_registrar(Target::CL);
 
 CLDeviceBackend::CLDeviceBackend()
-    : _context_count(0), _tuner(), _gemm_heuristics(), _allocator(nullptr), _tuner_file(), _backend_type(CLBackendType::Native)
+    : _context_count(0), _tuner(), _allocator(nullptr), _tuner_file()
 {
 }
 
 CLDeviceBackend::~CLDeviceBackend()
 {
-    _tuner.save_to_file(_tuner_file);
+    // TODO (geopin01) : Shouldn't call non exception safe stuff here
+    if(_tuner.tune_new_kernels() && !_tuner.lws_table().empty() && !_tuner_file.empty())
+    {
+        _tuner.save_to_file(_tuner_file);
+    }
 }
 
 void CLDeviceBackend::set_kernel_tuning(bool enable_tuning)
@@ -86,9 +91,9 @@ void CLDeviceBackend::set_kernel_tuning_mode(CLTunerMode tuning_mode)
 void CLDeviceBackend::initialize_backend()
 {
     // Setup Scheduler
-    CLScheduler::get().default_init(&_tuner, &_gemm_heuristics, _backend_type);
+    CLScheduler::get().default_init(&_tuner);
     // Create allocator with new context
-    _allocator = std::make_unique<CLBufferAllocator>();
+    _allocator = support::cpp14::make_unique<CLBufferAllocator>(nullptr /* legacy path for CLCoreRuntimeContext */);
 }
 
 void CLDeviceBackend::release_backend_context(GraphContext &ctx)
@@ -107,13 +112,11 @@ void CLDeviceBackend::setup_backend_context(GraphContext &ctx)
     _context_count++;
     if(_context_count == 1)
     {
-        _backend_type = ctx.config().backend_type;
         initialize_backend();
     }
 
     // Setup tuner
     _tuner_file = ctx.config().tuner_file;
-
     // Load tuner data if available
     if(file_exists(_tuner_file))
     {
@@ -122,10 +125,6 @@ void CLDeviceBackend::setup_backend_context(GraphContext &ctx)
 
     set_kernel_tuning(ctx.config().use_tuner);
     set_kernel_tuning_mode(ctx.config().tuner_mode);
-
-    // Attempt to load mlgo heuristics
-    ARM_COMPUTE_ERROR_ON(CLScheduler::get().gemm_heuristics() == nullptr);
-    CLScheduler::get().gemm_heuristics()->reload_from_file(ctx.config().mlgo_file);
 
     // Setup a management backend
     if(ctx.memory_management_ctx(Target::CL) == nullptr)
@@ -171,7 +170,7 @@ std::unique_ptr<ITensorHandle> CLDeviceBackend::create_tensor(const Tensor &tens
     TensorInfo info(tensor_desc.shape, 1, tensor_desc.data_type, tensor_desc.quant_info);
     info.set_data_layout(tensor_desc.layout);
 
-    return std::make_unique<CLTensorHandle>(info);
+    return support::cpp14::make_unique<CLTensorHandle>(info);
 }
 
 std::unique_ptr<ITensorHandle> CLDeviceBackend::create_subtensor(ITensorHandle *parent, TensorShape shape, Coordinates coords, bool extend_parent)
@@ -181,7 +180,7 @@ std::unique_ptr<ITensorHandle> CLDeviceBackend::create_subtensor(ITensorHandle *
         return nullptr;
     }
 
-    return std::make_unique<CLSubTensorHandle>(parent, shape, coords, extend_parent);
+    return support::cpp14::make_unique<CLSubTensorHandle>(parent, shape, coords, extend_parent);
 }
 
 std::unique_ptr<arm_compute::IFunction> CLDeviceBackend::configure_node(INode &node, GraphContext &ctx)
@@ -220,11 +219,6 @@ std::shared_ptr<arm_compute::IWeightsManager> CLDeviceBackend::create_weights_ma
 {
     auto weights_mgr = std::make_shared<IWeightsManager>();
     return weights_mgr;
-}
-
-void CLDeviceBackend::sync()
-{
-    CLScheduler::get().sync();
 }
 } // namespace backends
 } // namespace graph

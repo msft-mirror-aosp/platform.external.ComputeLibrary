@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -55,7 +55,7 @@ REGISTER_FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture, framework::DatasetMode
                                                                                                              datasets::BorderModes()),
                                                                                                      framework::dataset::make("SamplingPolicy", { SamplingPolicy::CENTER })));
 TEST_SUITE_END() // Scale
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace benchmark
 } // namespace test
 } // namespace arm_compute
