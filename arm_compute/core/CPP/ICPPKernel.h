@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -38,6 +38,8 @@ class ITensor;
 class ICPPKernel : public IKernel
 {
 public:
+    static constexpr size_t default_mws       = 1; /* Default minimum workload size value  - no impact */
+
     /** Default destructor */
     virtual ~ICPPKernel() = default;
 
@@ -86,6 +88,20 @@ public:
     virtual void run_op(ITensorPack &tensors, const Window &window, const ThreadInfo &info)
     {
         ARM_COMPUTE_UNUSED(tensors, window, info);
+    }
+
+    /** Return minimum workload size of the relevant kernel
+     *
+     * @param[in] platform     The CPU platform used to create the context.
+     * @param[in] thread_count Number of threads in the execution.
+     *
+     * @return Minimum workload size for requested configuration.
+     */
+    virtual size_t get_mws(const CPUInfo &platform, size_t thread_count) const
+    {
+        ARM_COMPUTE_UNUSED(platform, thread_count);
+
+        return default_mws;
     }
 
     /** Name of the kernel

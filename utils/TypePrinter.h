@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,19 +24,34 @@
 #ifndef __ARM_COMPUTE_TYPE_PRINTER_H__
 #define __ARM_COMPUTE_TYPE_PRINTER_H__
 
-#include "arm_compute/core/CPP/CPPTypes.h"
+#ifdef ARM_COMPUTE_OPENCL_ENABLED
+#include "arm_compute/core/CL/ICLTensor.h"
+#endif /* ARM_COMPUTE_OPENCL_ENABLED */
+
 #include "arm_compute/core/Dimensions.h"
 #include "arm_compute/core/Error.h"
 #include "arm_compute/core/GPUTarget.h"
-#include "arm_compute/core/HOGInfo.h"
 #include "arm_compute/core/KernelDescriptors.h"
 #include "arm_compute/core/Size2D.h"
 #include "arm_compute/core/Strides.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/Types.h"
+#include "arm_compute/core/experimental/IPostOp.h"
+#include "arm_compute/core/experimental/PostOps.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/CastAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/ClampAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/Conv2dAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/DepthwiseConv2dAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/Pool2dAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/ResizeAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/attributes/SoftmaxAttributes.h"
+#include "arm_compute/dynamic_fusion/sketch/gpu/operators/GpuPool2d.h"
 #include "arm_compute/runtime/CL/CLTunerTypes.h"
+#include "arm_compute/runtime/CL/CLTypes.h"
+#include "arm_compute/runtime/FunctionDescriptors.h"
+#include "arm_compute/runtime/common/LSTMParams.h"
+#include "support/Cast.h"
 #include "support/StringSupport.h"
-
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -62,6 +77,212 @@ std::string to_string_if_not_null(T *arg)
     }
 }
 
+/** Fallback method: try to use std::to_string:
+ *
+ * @param[in] val Value to convert to string
+ *
+ * @return String representing val.
+ */
+template <typename T>
+inline std::string to_string(const T &val)
+{
+    return support::cpp11::to_string(val);
+}
+
+/** Formatted output of a vector of objects.
+ *
+ * @note: Using the overloaded to_string() instead of overloaded operator<<(), because to_string() functions are
+ *        overloaded for all types, where two or more of them can use the same operator<<(), ITensor is an example.
+ *
+ * @param[out] os   Output stream
+ * @param[in]  args Vector of objects to print
+ *
+ * @return Modified output stream.
+ */
+template <typename T>
+::std::ostream &operator<<(::std::ostream &os, const std::vector<T> &args)
+{
+    const size_t max_print_size = 5U;
+
+    os << "[";
+    bool   first = true;
+    size_t i;
+    for(i = 0; i < args.size(); ++i)
+    {
+        if(i == max_print_size)
+        {
+            break;
+        }
+        if(first)
+        {
+            first = false;
+        }
+        else
+        {
+            os << ", ";
+        }
+        os << to_string(args[i]);
+    }
+    if(i < args.size())
+    {
+        os << ", ...";
+    }
+    os << "]";
+    return os;
+}
+
+/** Formatted output of a vector of objects.
+ *
+ * @param[in] args Vector of objects to print
+ *
+ * @return String representing args.
+ */
+template <typename T>
+std::string to_string(const std::vector<T> &args)
+{
+    std::stringstream str;
+    str << args;
+    return str.str();
+}
+
+/** @name (EXPERIMENTAL_POST_OPS)
+ * @{
+ */
+/** Formmated output of the @ref experimental::PostOpType type
+ *
+ * @param[out] os           Output stream.
+ * @param[in]  post_op_type Type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, experimental::PostOpType post_op_type)
+{
+    os << "type=";
+    switch(post_op_type)
+    {
+        case experimental::PostOpType::Activation:
+        {
+            os << "Activation";
+            break;
+        }
+        case experimental::PostOpType::Eltwise_Add:
+        {
+            os << "Eltwise_Add";
+            break;
+        }
+        case experimental::PostOpType::Eltwise_PRelu:
+        {
+            os << "Eltwise_PRelu";
+            break;
+        }
+        default:
+        {
+            ARM_COMPUTE_ERROR("Unsupported PostOpType");
+            break;
+        }
+    }
+    return os;
+}
+/** Converts a @ref experimental::PostOpType to string
+ *
+ * @param[in] post_op_type PostOpType value to be converted
+ *
+ * @return String representing the corresponding PostOpType
+ */
+inline std::string to_string(experimental::PostOpType post_op_type)
+{
+    std::stringstream str;
+    str << post_op_type;
+    return str.str();
+}
+/** Formatted output of the @ref experimental::IPostOp type.
+ *
+ * @param[out] os      Output stream.
+ * @param[in]  post_op Type to output.
+ *
+ * @return Modified output stream.
+ */
+template <typename T>
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::IPostOp<T> &post_op)
+{
+    os << "<";
+    os << post_op.type() << ",";
+    os << "prev_dst_pos=" << post_op.prev_dst_pos() << ",";
+    switch(post_op.type())
+    {
+        case experimental::PostOpType::Activation:
+        {
+            const auto _post_op = utils::cast::polymorphic_downcast<const experimental::PostOpAct<T> *>(&post_op);
+            os << "act_info=" << &(_post_op->_act_info);
+            break;
+        }
+        case experimental::PostOpType::Eltwise_Add:
+        {
+            const auto _post_op = utils::cast::polymorphic_downcast<const experimental::PostOpEltwiseAdd<T> *>(&post_op);
+            os << "convert_policy=" << _post_op->_policy;
+            break;
+        }
+        case experimental::PostOpType::Eltwise_PRelu:
+        {
+            const auto _post_op = utils::cast::polymorphic_downcast<const experimental::PostOpEltwisePRelu<T> *>(&post_op);
+            os << "convert_policy=" << _post_op->_policy;
+            break;
+        }
+        default:
+        {
+            ARM_COMPUTE_ERROR("Unsupported PostOpType");
+            break;
+        }
+    }
+    os << ">";
+    return os;
+}
+/** Converts an @ref experimental::IPostOp to string
+ *
+ * @param[in] post_op IPostOp value to be converted
+ *
+ * @return String representing the corresponding IPostOp
+ */
+template <typename T>
+inline std::string to_string(const experimental::IPostOp<T> &post_op)
+{
+    std::stringstream str;
+    str << post_op;
+    return str.str();
+}
+/** Formatted output of the @ref experimental::PostOpList type.
+ *
+ * @param[out] os       Output stream.
+ * @param[in]  post_ops Type to output.
+ *
+ * @return Modified output stream.
+ */
+template <typename T>
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::PostOpList<T> &post_ops)
+{
+    os << "[";
+    for(const auto &post_op : post_ops.get_list())
+    {
+        os << *post_op << ",";
+    }
+    os << "]";
+    return os;
+}
+/** Converts a @ref experimental::PostOpList to string
+ *
+ * @param[in] post_ops PostOpList value to be converted
+ *
+ * @return String representing the corresponding PostOpList
+ */
+template <typename T>
+inline std::string to_string(const experimental::PostOpList<T> &post_ops)
+{
+    std::stringstream str;
+    str << post_ops;
+    return str.str();
+}
+/** @} */ // end of group (EXPERIMENTAL_POST_OPS)
+
 /** Formatted output of the Dimensions type.
  *
  * @param[out] os         Output stream.
@@ -78,94 +299,11 @@ inline ::std::ostream &operator<<(::std::ostream &os, const Dimensions<T> &dimen
 
         for(unsigned int d = 1; d < dimensions.num_dimensions(); ++d)
         {
-            os << "x" << dimensions[d];
+            os << "," << dimensions[d];
         }
     }
 
     return os;
-}
-
-/** Formatted output of the NonLinearFilterFunction type.
- *
- * @param[out] os       Output stream.
- * @param[in]  function Type to output.
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const NonLinearFilterFunction &function)
-{
-    switch(function)
-    {
-        case NonLinearFilterFunction::MAX:
-            os << "MAX";
-            break;
-        case NonLinearFilterFunction::MEDIAN:
-            os << "MEDIAN";
-            break;
-        case NonLinearFilterFunction::MIN:
-            os << "MIN";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the NonLinearFilterFunction type.
- *
- * @param[in] function Type to output.
- *
- * @return Formatted string.
- */
-inline std::string to_string(const NonLinearFilterFunction &function)
-{
-    std::stringstream str;
-    str << function;
-    return str.str();
-}
-
-/** Formatted output of the MatrixPattern type.
- *
- * @param[out] os      Output stream.
- * @param[in]  pattern Type to output.
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const MatrixPattern &pattern)
-{
-    switch(pattern)
-    {
-        case MatrixPattern::BOX:
-            os << "BOX";
-            break;
-        case MatrixPattern::CROSS:
-            os << "CROSS";
-            break;
-        case MatrixPattern::DISK:
-            os << "DISK";
-            break;
-        case MatrixPattern::OTHER:
-            os << "OTHER";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the MatrixPattern type.
- *
- * @param[in] pattern Type to output.
- *
- * @return Formatted string.
- */
-inline std::string to_string(const MatrixPattern &pattern)
-{
-    std::stringstream str;
-    str << pattern;
-    return str.str();
 }
 
 /** Formatted output of the RoundingPolicy type.
@@ -245,17 +383,18 @@ inline std::string to_string(const ROIPoolingLayerInfo &pool_info)
  */
 inline ::std::ostream &operator<<(::std::ostream &os, const GEMMKernelInfo &gemm_info)
 {
-    os << "( m= " << gemm_info.m;
-    os << " n= " << gemm_info.n;
-    os << " k= " << gemm_info.k;
-    os << " depth_output_gemm3d= " << gemm_info.depth_output_gemm3d;
-    os << " reinterpret_input_as_3d= " << gemm_info.reinterpret_input_as_3d;
-    os << " broadcast_bias= " << gemm_info.broadcast_bias;
-    os << " fp_mixed_precision= " << gemm_info.fp_mixed_precision;
-    os << " mult_transpose1xW_width= " << gemm_info.mult_transpose1xW_width;
-    os << " mult_interleave4x4_height= " << gemm_info.mult_interleave4x4_height;
-    os << " a_offset = " << gemm_info.a_offset;
-    os << " b_offset = " << gemm_info.b_offset;
+    os << "( m=" << gemm_info.m;
+    os << " n=" << gemm_info.n;
+    os << " k=" << gemm_info.k;
+    os << " depth_output_gemm3d=" << gemm_info.depth_output_gemm3d;
+    os << " reinterpret_input_as_3d=" << gemm_info.reinterpret_input_as_3d;
+    os << " broadcast_bias=" << gemm_info.broadcast_bias;
+    os << " fp_mixed_precision=" << gemm_info.fp_mixed_precision;
+    os << " mult_transpose1xW_width=" << gemm_info.mult_transpose1xW_width;
+    os << " mult_interleave4x4_height=" << gemm_info.mult_interleave4x4_height;
+    os << " a_offset=" << gemm_info.a_offset;
+    os << " b_offset=" << gemm_info.b_offset;
+    os << "post_ops=" << gemm_info.post_ops;
     os << ")";
     return os;
 }
@@ -269,7 +408,7 @@ inline ::std::ostream &operator<<(::std::ostream &os, const GEMMKernelInfo &gemm
  */
 inline ::std::ostream &operator<<(::std::ostream &os, const GEMMLHSMatrixInfo &gemm_info)
 {
-    os << "( m0= " << (unsigned int)gemm_info.m0 << " k0= " << gemm_info.k0 << "  v0= " << gemm_info.v0 << "  trans= " << gemm_info.transpose << "  inter= " << gemm_info.interleave << "})";
+    os << "( m0=" << (unsigned int)gemm_info.m0 << " k0=" << gemm_info.k0 << "  v0=" << gemm_info.v0 << "  trans=" << gemm_info.transpose << "  inter=" << gemm_info.interleave << "})";
     return os;
 }
 
@@ -282,7 +421,7 @@ inline ::std::ostream &operator<<(::std::ostream &os, const GEMMLHSMatrixInfo &g
  */
 inline ::std::ostream &operator<<(::std::ostream &os, const GEMMRHSMatrixInfo &gemm_info)
 {
-    os << "( n0= " << (unsigned int)gemm_info.n0 << " k0= " << gemm_info.k0 << "  h0= " << gemm_info.h0 << "  trans= " << gemm_info.transpose << "  inter= " << gemm_info.interleave << "})";
+    os << "( n0=" << (unsigned int)gemm_info.n0 << " k0=" << gemm_info.k0 << "  h0=" << gemm_info.h0 << "  trans=" << gemm_info.transpose << "  inter=" << gemm_info.interleave << " exp_img=" << gemm_info.export_to_cl_image << "})";
     return os;
 }
 
@@ -335,10 +474,19 @@ inline std::string to_string(const GEMMKernelInfo &gemm_info)
 inline ::std::ostream &operator<<(::std::ostream &os, const BoundingBoxTransformInfo &bbox_info)
 {
     auto weights = bbox_info.weights();
-    os << "(" << bbox_info.img_width() << "x" << bbox_info.img_height() << ")~" << bbox_info.scale() << "(weights = {" << weights[0] << ", " << weights[1] << ", " << weights[2] << ", " << weights[3] <<
-       "})";
+    os << "(" << bbox_info.img_width() << "x" << bbox_info.img_height() << ")~" << bbox_info.scale() << "(weights={" << weights[0] << ", " << weights[1] << ", " << weights[2] << ", " << weights[3] << "})";
     return os;
 }
+
+#if defined(ARM_COMPUTE_ENABLE_BF16)
+inline ::std::ostream &operator<<(::std::ostream &os, const bfloat16 &v)
+{
+    std::stringstream str;
+    str << v;
+    os << str.str();
+    return os;
+}
+#endif /* defined(ARM_COMPUTE_ENABLE_BF16) */
 
 /** Formatted output of the BoundingBoxTransformInfo type.
  *
@@ -486,6 +634,12 @@ inline ::std::ostream &operator<<(::std::ostream &os, const ActivationLayerInfo:
         case ActivationLayerInfo::ActivationFunction::HARD_SWISH:
             os << "HARD_SWISH";
             break;
+        case ActivationLayerInfo::ActivationFunction::SWISH:
+            os << "SWISH";
+            break;
+        case ActivationLayerInfo::ActivationFunction::GELU:
+            os << "GELU";
+            break;
 
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
@@ -496,7 +650,7 @@ inline ::std::ostream &operator<<(::std::ostream &os, const ActivationLayerInfo:
 
 /** Formatted output of the activation function info type.
  *
- * @param[in] info Type to output.
+ * @param[in] info ActivationLayerInfo to output.
  *
  * @return Formatted string.
  */
@@ -508,6 +662,37 @@ inline std::string to_string(const arm_compute::ActivationLayerInfo &info)
         str << info.activation();
     }
     return str.str();
+}
+
+/** Formatted output of the activation function info.
+ *
+ * @param[out] os   Output stream.
+ * @param[in]  info ActivationLayerInfo to output.
+ *
+ * @return Formatted string.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const ActivationLayerInfo *info)
+{
+    if(info != nullptr)
+    {
+        if(info->enabled())
+        {
+            os << info->activation();
+            os << "(";
+            os << "VAL_A=" << info->a() << ",";
+            os << "VAL_B=" << info->b();
+            os << ")";
+        }
+        else
+        {
+            os << "disabled";
+        }
+    }
+    else
+    {
+        os << "nullptr";
+    }
+    return os;
 }
 
 /** Formatted output of the activation function type.
@@ -651,6 +836,12 @@ inline ::std::ostream &operator<<(::std::ostream &os, const DataLayout &data_lay
         case DataLayout::NCHW:
             os << "NCHW";
             break;
+        case DataLayout::NDHWC:
+            os << "NDHWC";
+            break;
+        case DataLayout::NCDHW:
+            os << "NCDHW";
+            break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
     }
@@ -691,6 +882,9 @@ inline ::std::ostream &operator<<(::std::ostream &os, const DataLayoutDimension 
             break;
         case DataLayoutDimension::CHANNEL:
             os << "CHANNEL";
+            break;
+        case DataLayoutDimension::DEPTH:
+            os << "DEPTH";
             break;
         case DataLayoutDimension::BATCHES:
             os << "BATCHES";
@@ -1072,7 +1266,39 @@ inline ::std::ostream &operator<<(::std::ostream &os, const SamplingPolicy &poli
     return os;
 }
 
-/** Formatted output of the TensorInfo type.
+/** Formatted output of the ITensorInfo type.
+ *
+ * @param[out] os   Output stream.
+ * @param[in]  info Tensor information.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(std::ostream &os, const ITensorInfo *info)
+{
+    const DataType   data_type   = info->data_type();
+    const DataLayout data_layout = info->data_layout();
+
+    os << "Shape=" << info->tensor_shape() << ","
+       << "DataLayout=" << string_from_data_layout(data_layout) << ","
+       << "DataType=" << string_from_data_type(data_type);
+
+    if(is_data_type_quantized(data_type))
+    {
+        const QuantizationInfo qinfo   = info->quantization_info();
+        const auto             scales  = qinfo.scale();
+        const auto             offsets = qinfo.offset();
+
+        os << ", QuantizationInfo={"
+           << "scales.size=" << scales.size()
+           << ", scale(s)=" << scales << ", ";
+
+        os << "offsets.size=" << offsets.size()
+           << ", offset(s)=" << offsets << "}";
+    }
+    return os;
+}
+
+/** Formatted output of the const TensorInfo& type.
  *
  * @param[out] os   Output stream.
  * @param[in]  info Type to output.
@@ -1081,12 +1307,11 @@ inline ::std::ostream &operator<<(::std::ostream &os, const SamplingPolicy &poli
  */
 inline ::std::ostream &operator<<(::std::ostream &os, const TensorInfo &info)
 {
-    os << "{Shape=" << info.tensor_shape() << ","
-       << "Type=" << info.data_type() << ","
-       << "Channels=" << info.num_channels() << "}";
+    os << &info;
     return os;
 }
-/** Formatted output of the TensorInfo type.
+
+/** Formatted output of the const TensorInfo& type.
  *
  * @param[in] info Type to output.
  *
@@ -1095,9 +1320,124 @@ inline ::std::ostream &operator<<(::std::ostream &os, const TensorInfo &info)
 inline std::string to_string(const TensorInfo &info)
 {
     std::stringstream str;
-    str << info;
+    str << &info;
     return str.str();
 }
+
+/** Formatted output of the const ITensorInfo& type.
+ *
+ * @param[in] info Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const ITensorInfo &info)
+{
+    std::stringstream str;
+    str << &info;
+    return str.str();
+}
+
+/** Formatted output of the const ITensorInfo* type.
+ *
+ * @param[in] info Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const ITensorInfo *info)
+{
+    std::string ret_str = "nullptr";
+    if(info != nullptr)
+    {
+        std::stringstream str;
+        str << info;
+        ret_str = str.str();
+    }
+    return ret_str;
+}
+
+/** Formatted output of the ITensorInfo* type.
+ *
+ * @param[in] info Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(ITensorInfo *info)
+{
+    return to_string(static_cast<const ITensorInfo *>(info));
+}
+
+/** Formatted output of the ITensorInfo type obtained from const ITensor* type.
+ *
+ * @param[in] tensor Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const ITensor *tensor)
+{
+    std::string ret_str = "nullptr";
+    if(tensor != nullptr)
+    {
+        std::stringstream str;
+        str << "ITensor->info(): " << tensor->info();
+        ret_str = str.str();
+    }
+    return ret_str;
+}
+
+/** Formatted output of the ITensorInfo type obtained from the ITensor* type.
+ *
+ * @param[in] tensor Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(ITensor *tensor)
+{
+    return to_string(static_cast<const ITensor *>(tensor));
+}
+
+/** Formatted output of the ITensorInfo type obtained from the ITensor& type.
+ *
+ * @param[in] tensor Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(ITensor &tensor)
+{
+    std::stringstream str;
+    str << "ITensor.info(): " << tensor.info();
+    return str.str();
+}
+
+#ifdef ARM_COMPUTE_OPENCL_ENABLED
+/** Formatted output of the ITensorInfo type obtained from the const ICLTensor& type.
+ *
+ * @param[in] cl_tensor Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const ICLTensor *cl_tensor)
+{
+    std::string ret_str = "nullptr";
+    if(cl_tensor != nullptr)
+    {
+        std::stringstream str;
+        str << "ICLTensor->info(): " << cl_tensor->info();
+        ret_str = str.str();
+    }
+    return ret_str;
+}
+
+/** Formatted output of the ITensorInfo type obtained from the ICLTensor& type.
+ *
+ * @param[in] cl_tensor Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(ICLTensor *cl_tensor)
+{
+    return to_string(static_cast<const ICLTensor *>(cl_tensor));
+}
+#endif /* ARM_COMPUTE_OPENCL_ENABLED */
 
 /** Formatted output of the Dimensions type.
  *
@@ -1188,7 +1528,8 @@ inline ::std::ostream &operator<<(::std::ostream &os, const GEMMInfo &info)
     os << "retain_internal_weights=" << info.retain_internal_weights() << ",";
     os << "fp_mixed_precision=" << info.fp_mixed_precision() << ",";
     os << "broadcast_bias=" << info.broadcast_bias() << ",";
-    os << "pretranpose_B=" << info.pretranpose_B() << ",";
+    os << "pretranspose_B=" << info.pretranspose_B() << ",";
+    os << "post_ops=" << info.post_ops() << "}";
 
     return os;
 }
@@ -1280,7 +1621,7 @@ inline std::string to_string(const Window::Dimension &dim)
     str << dim;
     return str.str();
 }
-/** Formatted output of the Window type.
+/** Formatted output of the Window& type.
  *
  * @param[in] win Type to output.
  *
@@ -1291,6 +1632,24 @@ inline std::string to_string(const Window &win)
     std::stringstream str;
     str << win;
     return str.str();
+}
+
+/** Formatted output of the Window* type.
+ *
+ * @param[in] win Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(Window *win)
+{
+    std::string ret_str = "nullptr";
+    if(win != nullptr)
+    {
+        std::stringstream str;
+        str << *win;
+        ret_str = str.str();
+    }
+    return ret_str;
 }
 
 /** Formatted output of the Rectangle type.
@@ -1519,6 +1878,9 @@ inline ::std::ostream &operator<<(::std::ostream &os, const ArithmeticOperation 
         case ArithmeticOperation::POWER:
             os << "POWER";
             break;
+        case ArithmeticOperation::PRELU:
+            os << "PRELU";
+            break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
     }
@@ -1653,8 +2015,17 @@ inline ::std::ostream &operator<<(::std::ostream &os, const ElementWiseUnary &op
         case ElementWiseUnary::LOG:
             os << "LOG";
             break;
+        case ElementWiseUnary::SIN:
+            os << "SIN";
+            break;
+        case ElementWiseUnary::ABS:
+            os << "ABS";
+            break;
         case ElementWiseUnary::ROUND:
             os << "ROUND";
+            break;
+        case ElementWiseUnary::LOGICAL_NOT:
+            os << "LOGICAL_NOT";
             break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
@@ -1737,6 +2108,122 @@ inline std::string to_string(const PoolingLayerInfo &info)
     return str.str();
 }
 
+/** Formatted output of the Size3D type.
+ *
+ * @param[out] os   Output stream
+ * @param[in]  size Type to output
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Size3D &size)
+{
+    os << size.width << "x" << size.height << "x" << size.depth;
+
+    return os;
+}
+
+/** Formatted output of the Size3D type.
+ *
+ * @param[in] type Type to output
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const Size3D &type)
+{
+    std::stringstream str;
+    str << type;
+    return str.str();
+}
+
+/** Formatted output of the Padding3D type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  padding3d Padding info for 3D spatial dimension shape.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Padding3D &padding3d)
+{
+    os << padding3d.left << "," << padding3d.right << ","
+       << padding3d.top << "," << padding3d.bottom << ","
+       << padding3d.front << "," << padding3d.back;
+    return os;
+}
+
+/** Converts a @ref Padding3D to string
+ *
+ * @param[in] padding3d Padding3D value to be converted
+ *
+ * @return String representing the corresponding Padding3D
+ */
+inline std::string to_string(const Padding3D &padding3d)
+{
+    std::stringstream str;
+    str << padding3d;
+    return str.str();
+}
+
+/** Formatted output of the DimensionRoundingType type.
+ *
+ * @param[out] os            Output stream.
+ * @param[in]  rounding_type DimensionRoundingType Dimension rounding type when down-scaling, or compute output shape of pooling(2D or 3D).
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const DimensionRoundingType &rounding_type)
+{
+    switch(rounding_type)
+    {
+        case DimensionRoundingType::CEIL:
+            os << "CEIL";
+            break;
+        case DimensionRoundingType::FLOOR:
+            os << "FLOOR";
+            break;
+        default:
+            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
+    }
+    return os;
+}
+
+/** Formatted output of the Pooling 3d Layer Info.
+ *
+ * @param[out] os   Output stream.
+ * @param[in]  info Pooling 3D layer info to print to output stream.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Pooling3dLayerInfo &info)
+{
+    os << "{Type=" << info.pool_type << ","
+       << "IsGlobalPooling=" << info.is_global_pooling;
+    if(!info.is_global_pooling)
+    {
+        os << ","
+           << "PoolSize=" << info.pool_size << ", "
+           << "Stride=" << info.stride << ", "
+           << "Padding=" << info.padding << ", "
+           << "Exclude Padding=" << info.exclude_padding << ", "
+           << "fp_mixed_precision=" << info.fp_mixed_precision << ", "
+           << "DimensionRoundingType=" << info.round_type;
+    }
+    os << "}";
+    return os;
+}
+
+/** Formatted output of the Pooling 3d Layer Info.
+ *
+ * @param[in] info Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const Pooling3dLayerInfo &info)
+{
+    std::stringstream str;
+    str << info;
+    return str.str();
+}
+
 /** Formatted output of the PriorBoxLayerInfo.
  *
  * @param[in] info Type to output.
@@ -1758,140 +2245,6 @@ inline std::string to_string(const PriorBoxLayerInfo &info)
         << "Offset:" << info.offset()
         << "Variances:" << info.variances().size();
     str << "}";
-    return str.str();
-}
-
-/** Formatted output of the KeyPoint type.
- *
- * @param[out] os    Output stream
- * @param[in]  point Type to output.
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const KeyPoint &point)
-{
-    os << "{x=" << point.x << ","
-       << "y=" << point.y << ","
-       << "strength=" << point.strength << ","
-       << "scale=" << point.scale << ","
-       << "orientation=" << point.orientation << ","
-       << "tracking_status=" << point.tracking_status << ","
-       << "error=" << point.error << "}";
-
-    return os;
-}
-
-/** Formatted output of the PhaseType type.
- *
- * @param[out] os         Output stream
- * @param[in]  phase_type Type to output.
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const PhaseType &phase_type)
-{
-    switch(phase_type)
-    {
-        case PhaseType::SIGNED:
-            os << "SIGNED";
-            break;
-        case PhaseType::UNSIGNED:
-            os << "UNSIGNED";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the PhaseType type.
- *
- * @param[in] type Type to output.
- *
- * @return Formatted string.
- */
-inline std::string to_string(const arm_compute::PhaseType &type)
-{
-    std::stringstream str;
-    str << type;
-    return str.str();
-}
-
-/** Formatted output of the MagnitudeType type.
- *
- * @param[out] os             Output stream
- * @param[in]  magnitude_type Type to output.
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const MagnitudeType &magnitude_type)
-{
-    switch(magnitude_type)
-    {
-        case MagnitudeType::L1NORM:
-            os << "L1NORM";
-            break;
-        case MagnitudeType::L2NORM:
-            os << "L2NORM";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the MagnitudeType type.
- *
- * @param[in] type Type to output.
- *
- * @return Formatted string.
- */
-inline std::string to_string(const arm_compute::MagnitudeType &type)
-{
-    std::stringstream str;
-    str << type;
-    return str.str();
-}
-
-/** Formatted output of the HOGNormType type.
- *
- * @param[out] os        Output stream
- * @param[in]  norm_type Type to output
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const HOGNormType &norm_type)
-{
-    switch(norm_type)
-    {
-        case HOGNormType::L1_NORM:
-            os << "L1_NORM";
-            break;
-        case HOGNormType::L2_NORM:
-            os << "L2_NORM";
-            break;
-        case HOGNormType::L2HYS_NORM:
-            os << "L2HYS_NORM";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the HOGNormType type.
- *
- * @param[in] type Type to output
- *
- * @return Formatted string.
- */
-inline std::string to_string(const HOGNormType &type)
-{
-    std::stringstream str;
-    str << type;
     return str.str();
 }
 
@@ -1922,40 +2275,6 @@ inline std::string to_string(const Size2D &type)
     return str.str();
 }
 
-/** Formatted output of the HOGInfo type.
- *
- * @param[out] os       Output stream
- * @param[in]  hog_info Type to output
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const HOGInfo &hog_info)
-{
-    os << "{CellSize=" << hog_info.cell_size() << ","
-       << "BlockSize=" << hog_info.block_size() << ","
-       << "DetectionWindowSize=" << hog_info.detection_window_size() << ","
-       << "BlockStride=" << hog_info.block_stride() << ","
-       << "NumBins=" << hog_info.num_bins() << ","
-       << "NormType=" << hog_info.normalization_type() << ","
-       << "L2HystThreshold=" << hog_info.l2_hyst_threshold() << ","
-       << "PhaseType=" << hog_info.phase_type() << "}";
-
-    return os;
-}
-
-/** Formatted output of the HOGInfo type.
- *
- * @param[in] type Type to output
- *
- * @return Formatted string.
- */
-inline std::string to_string(const HOGInfo &type)
-{
-    std::stringstream str;
-    str << type;
-    return str.str();
-}
-
 /** Formatted output of the ConvolutionMethod type.
  *
  * @param[out] os          Output stream
@@ -1975,6 +2294,12 @@ inline ::std::ostream &operator<<(::std::ostream &os, const ConvolutionMethod &c
             break;
         case ConvolutionMethod::WINOGRAD:
             os << "WINOGRAD";
+            break;
+        case ConvolutionMethod::FFT:
+            os << "FFT";
+            break;
+        case ConvolutionMethod::GEMM_CONV2D:
+            os << "GEMM_CONV2D";
             break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
@@ -2010,6 +2335,9 @@ inline ::std::ostream &operator<<(::std::ostream &os, const GPUTarget &gpu_targe
         case GPUTarget::GPU_ARCH_MASK:
             os << "GPU_ARCH_MASK";
             break;
+        case GPUTarget::GPU_GENERATION_MASK:
+            os << "GPU_GENERATION_MASK";
+            break;
         case GPUTarget::MIDGARD:
             os << "MIDGARD";
             break;
@@ -2043,17 +2371,50 @@ inline ::std::ostream &operator<<(::std::ostream &os, const GPUTarget &gpu_targe
         case GPUTarget::G51LIT:
             os << "G51LIT";
             break;
+        case GPUTarget::G31:
+            os << "G31";
+            break;
         case GPUTarget::G76:
             os << "G76";
+            break;
+        case GPUTarget::G52:
+            os << "G52";
+            break;
+        case GPUTarget::G52LIT:
+            os << "G52LIT";
             break;
         case GPUTarget::G77:
             os << "G77";
             break;
-        case GPUTarget::TBOX:
-            os << "TBOX";
+        case GPUTarget::G57:
+            os << "G57";
             break;
-        case GPUTarget::TODX:
-            os << "TODX";
+        case GPUTarget::G78:
+            os << "G78";
+            break;
+        case GPUTarget::G68:
+            os << "G68";
+            break;
+        case GPUTarget::G78AE:
+            os << "G78AE";
+            break;
+        case GPUTarget::G710:
+            os << "G710";
+            break;
+        case GPUTarget::G610:
+            os << "G610";
+            break;
+        case GPUTarget::G510:
+            os << "G510";
+            break;
+        case GPUTarget::G310:
+            os << "G310";
+            break;
+        case GPUTarget::G715:
+            os << "G715";
+            break;
+        case GPUTarget::G615:
+            os << "G615";
             break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
@@ -2210,6 +2571,7 @@ inline std::string to_string(const DetectionPostProcessLayerInfo &detection_info
     str << detection_info;
     return str.str();
 }
+
 /** Formatted output of the DetectionWindow type.
  *
  * @param[in] detection_window Type to output
@@ -2221,128 +2583,6 @@ inline std::string to_string(const DetectionWindow &detection_window)
     std::stringstream str;
     str << detection_window;
     return str.str();
-}
-
-/** Formatted output of the Termination type.
- *
- * @param[out] os          Output stream
- * @param[in]  termination Type to output
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const Termination &termination)
-{
-    switch(termination)
-    {
-        case Termination::TERM_CRITERIA_EPSILON:
-            os << "TERM_CRITERIA_EPSILON";
-            break;
-        case Termination::TERM_CRITERIA_ITERATIONS:
-            os << "TERM_CRITERIA_ITERATIONS";
-            break;
-        case Termination::TERM_CRITERIA_BOTH:
-            os << "TERM_CRITERIA_BOTH";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the Termination type.
- *
- * @param[in] termination Type to output
- *
- * @return Formatted string.
- */
-inline std::string to_string(const Termination &termination)
-{
-    std::stringstream str;
-    str << termination;
-    return str.str();
-}
-
-/** Formatted output of the CPUModel type.
- *
- * @param[out] os        Output stream
- * @param[in]  cpu_model Model to output
- *
- * @return Modified output stream.
- */
-inline ::std::ostream &operator<<(::std::ostream &os, const CPUModel &cpu_model)
-{
-    switch(cpu_model)
-    {
-        case CPUModel::GENERIC:
-            os << "GENERIC";
-            break;
-        case CPUModel::GENERIC_FP16:
-            os << "GENERIC_FP16";
-            break;
-        case CPUModel::GENERIC_FP16_DOT:
-            os << "GENERIC_FP16_DOT";
-            break;
-        case CPUModel::A53:
-            os << "A53";
-            break;
-        case CPUModel::A55r0:
-            os << "A55r0";
-            break;
-        case CPUModel::A55r1:
-            os << "A55r1";
-            break;
-        case CPUModel::A73:
-            os << "A73";
-            break;
-        case CPUModel::X1:
-            os << "X1";
-            break;
-        default:
-            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
-    }
-
-    return os;
-}
-
-/** Formatted output of the CPUModel type.
- *
- * @param[in] cpu_model Model to output
- *
- * @return Formatted string.
- */
-inline std::string to_string(const CPUModel &cpu_model)
-{
-    std::stringstream str;
-    str << cpu_model;
-    return str.str();
-}
-/** Formatted output of a vector of objects.
- *
- * @param[out] os   Output stream
- * @param[in]  args Vector of objects to print
- *
- * @return Modified output stream.
- */
-template <typename T>
-inline ::std::ostream &operator<<(::std::ostream &os, const std::vector<T> &args)
-{
-    os << "[";
-    bool first = true;
-    for(auto &arg : args)
-    {
-        if(first)
-        {
-            first = false;
-        }
-        else
-        {
-            os << ", ";
-        }
-        os << arg;
-    }
-    os << "]";
-    return os;
 }
 
 /** Formatted output of @ref PriorBoxLayerInfo.
@@ -2368,20 +2608,6 @@ inline ::std::ostream &operator<<(::std::ostream &os, const PriorBoxLayerInfo &i
     return os;
 }
 
-/** Formatted output of a vector of objects.
- *
- * @param[in] args Vector of objects to print
- *
- * @return String representing args.
- */
-template <typename T>
-std::string to_string(const std::vector<T> &args)
-{
-    std::stringstream str;
-    str << args;
-    return str.str();
-}
-
 /** Formatted output of the WinogradInfo type. */
 inline ::std::ostream &operator<<(::std::ostream &os, const WinogradInfo &info)
 {
@@ -2398,18 +2624,6 @@ inline std::string to_string(const WinogradInfo &type)
     std::stringstream str;
     str << type;
     return str.str();
-}
-
-/** Fallback method: try to use std::to_string:
- *
- * @param[in] val Value to convert to string
- *
- * @return String representing val.
- */
-template <typename T>
-inline std::string to_string(const T &val)
-{
-    return support::cpp11::to_string(val);
 }
 
 /** Convert a CLTunerMode value to a string
@@ -2441,6 +2655,34 @@ inline std::string to_string(const CLTunerMode val)
         }
     }
 }
+/** Converts a @ref CLGEMMKernelType to string
+ *
+ * @param[in] val CLGEMMKernelType value to be converted
+ *
+ * @return String representing the corresponding CLGEMMKernelType
+ */
+inline std::string to_string(CLGEMMKernelType val)
+{
+    switch(val)
+    {
+        case CLGEMMKernelType::NATIVE:
+        {
+            return "Native";
+        }
+        case CLGEMMKernelType::RESHAPED_ONLY_RHS:
+        {
+            return "Reshaped_Only_RHS";
+        }
+        case CLGEMMKernelType::RESHAPED:
+        {
+            return "Reshaped";
+        }
+        default:
+        {
+            return "Unknown";
+        }
+    }
+}
 /** [Print CLTunerMode type] **/
 /** Formatted output of the CLTunerMode type.
  *
@@ -2453,6 +2695,956 @@ inline ::std::ostream &operator<<(::std::ostream &os, const CLTunerMode &val)
 {
     os << to_string(val);
     return os;
+}
+
+/** Formatted output of the ConvolutionInfo type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  conv_info ConvolutionInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const ConvolutionInfo &conv_info)
+{
+    os << "{PadStrideInfo=" << conv_info.pad_stride_info << ", "
+       << "depth_multiplier=" << conv_info.depth_multiplier << ", "
+       << "act_info=" << to_string(conv_info.act_info) << ", "
+       << "dilation=" << conv_info.dilation << "}";
+    return os;
+}
+
+/** Converts a @ref ConvolutionInfo to string
+ *
+ * @param[in] info ConvolutionInfo value to be converted
+ *
+ * @return String  representing the corresponding ConvolutionInfo
+ */
+inline std::string to_string(const ConvolutionInfo &info)
+{
+    std::stringstream str;
+    str << info;
+    return str.str();
+}
+
+/** Formatted output of the FullyConnectedLayerInfo type.
+ *
+ * @param[out] os         Output stream.
+ * @param[in]  layer_info FullyConnectedLayerInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const FullyConnectedLayerInfo &layer_info)
+{
+    os << "{activation_info=" << to_string(layer_info.activation_info) << ", "
+       << "weights_trained_layout=" << layer_info.weights_trained_layout << ", "
+       << "transpose_weights=" << layer_info.transpose_weights << ", "
+       << "are_weights_reshaped=" << layer_info.are_weights_reshaped << ", "
+       << "retain_internal_weights=" << layer_info.retain_internal_weights << ", "
+       << "constant_weights=" << layer_info.transpose_weights << ", "
+       << "fp_mixed_precision=" << layer_info.fp_mixed_precision << "}";
+    return os;
+}
+
+/** Converts a @ref FullyConnectedLayerInfo to string
+ *
+ * @param[in] info FullyConnectedLayerInfo value to be converted
+ *
+ * @return String  representing the corresponding FullyConnectedLayerInfo
+ */
+inline std::string to_string(const FullyConnectedLayerInfo &info)
+{
+    std::stringstream str;
+    str << info;
+    return str.str();
+}
+
+/** Formatted output of the GEMMLowpOutputStageType type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  gemm_type GEMMLowpOutputStageType to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const GEMMLowpOutputStageType &gemm_type)
+{
+    switch(gemm_type)
+    {
+        case GEMMLowpOutputStageType::NONE:
+            os << "NONE";
+            break;
+        case GEMMLowpOutputStageType::QUANTIZE_DOWN:
+            os << "QUANTIZE_DOWN";
+            break;
+        case GEMMLowpOutputStageType::QUANTIZE_DOWN_FIXEDPOINT:
+            os << "QUANTIZE_DOWN_FIXEDPOINT";
+            break;
+        case GEMMLowpOutputStageType::QUANTIZE_DOWN_FLOAT:
+            os << "QUANTIZE_DOWN_FLOAT";
+            break;
+        default:
+            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
+    }
+    return os;
+}
+
+/** Converts a @ref GEMMLowpOutputStageType to string
+ *
+ * @param[in] gemm_type GEMMLowpOutputStageType value to be converted
+ *
+ * @return String       representing the corresponding GEMMLowpOutputStageType
+ */
+inline std::string to_string(const GEMMLowpOutputStageType &gemm_type)
+{
+    std::stringstream str;
+    str << gemm_type;
+    return str.str();
+}
+
+/** Formatted output of the GEMMLowpOutputStageInfo type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  gemm_info GEMMLowpOutputStageInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const GEMMLowpOutputStageInfo &gemm_info)
+{
+    os << "{type=" << gemm_info.type << ", "
+       << "gemlowp_offset=" << gemm_info.gemmlowp_offset << ", "
+       << "gemmlowp_multiplier=" << gemm_info.gemmlowp_multiplier << ", "
+       << "gemmlowp_shift=" << gemm_info.gemmlowp_shift << ", "
+       << "gemmlowp_min_bound=" << gemm_info.gemmlowp_min_bound << ", "
+       << "gemmlowp_max_bound=" << gemm_info.gemmlowp_max_bound << ", "
+       << "gemmlowp_multipliers=" << gemm_info.gemmlowp_multiplier << ", "
+       << "gemmlowp_shifts=" << gemm_info.gemmlowp_shift << ", "
+       << "gemmlowp_real_multiplier=" << gemm_info.gemmlowp_real_multiplier << ", "
+       << "is_quantized_per_channel=" << gemm_info.is_quantized_per_channel << ", "
+       << "output_data_type=" << gemm_info.output_data_type << "}";
+    return os;
+}
+
+/** Converts a @ref GEMMLowpOutputStageInfo to string
+ *
+ * @param[in] gemm_info GEMMLowpOutputStageInfo value to be converted
+ *
+ * @return String representing the corresponding GEMMLowpOutputStageInfo
+ */
+inline std::string to_string(const GEMMLowpOutputStageInfo &gemm_info)
+{
+    std::stringstream str;
+    str << gemm_info;
+    return str.str();
+}
+
+/** Formatted output of the Conv2dInfo type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  conv_info Conv2dInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Conv2dInfo &conv_info)
+{
+    os << "{conv_info=" << conv_info.conv_info << ", "
+       << "dilation=" << conv_info.dilation << ", "
+       << "act_info=" << to_string(conv_info.act_info) << ", "
+       << "enable_fast_math=" << conv_info.enable_fast_math << ", "
+       << "num_groups=" << conv_info.num_groups << ","
+       << "post_ops=" << conv_info.post_ops << "}";
+    return os;
+}
+
+/** Converts a @ref Conv2dInfo to string
+ *
+ * @param[in] conv_info Conv2dInfo value to be converted
+ *
+ * @return String  representing the corresponding Conv2dInfo
+ */
+inline std::string to_string(const Conv2dInfo &conv_info)
+{
+    std::stringstream str;
+    str << conv_info;
+    return str.str();
+}
+
+/** Formatted output of the PixelValue type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  pixel_value PixelValue to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const PixelValue &pixel_value)
+{
+    os << "{value.u64=" << pixel_value.get<uint64_t>() << "}";
+    return os;
+}
+
+/** Converts a @ref PixelValue to string
+ *
+ * @param[in] pixel_value PixelValue value to be converted
+ *
+ * @return String representing the corresponding PixelValue
+ */
+inline std::string to_string(const PixelValue &pixel_value)
+{
+    std::stringstream str;
+    str << pixel_value;
+    return str.str();
+}
+
+/** Formatted output of the ScaleKernelInfo type.
+ *
+ * @param[out] os         Output stream.
+ * @param[in]  scale_info ScaleKernelInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const ScaleKernelInfo &scale_info)
+{
+    os << "{interpolation_policy=" << scale_info.interpolation_policy << ", "
+       << "BorderMode=" << scale_info.border_mode << ", "
+       << "PixelValue=" << scale_info.constant_border_value << ", "
+       << "SamplingPolicy=" << scale_info.sampling_policy << ", "
+       << "use_padding=" << scale_info.use_padding << ", "
+       << "align_corners=" << scale_info.align_corners << ", "
+       << "data_layout=" << scale_info.data_layout << "}";
+    return os;
+}
+
+/** Converts a @ref ScaleKernelInfo to string
+ *
+ * @param[in] scale_info ScaleKernelInfo value to be converted
+ *
+ * @return String representing the corresponding ScaleKernelInfo
+ */
+inline std::string to_string(const ScaleKernelInfo &scale_info)
+{
+    std::stringstream str;
+    str << scale_info;
+    return str.str();
+}
+
+/** Formatted output of the FFTDirection type.
+ *
+ * @param[out] os      Output stream.
+ * @param[in]  fft_dir FFTDirection to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const FFTDirection &fft_dir)
+{
+    switch(fft_dir)
+    {
+        case FFTDirection::Forward:
+            os << "Forward";
+            break;
+        case FFTDirection::Inverse:
+            os << "Inverse";
+            break;
+        default:
+            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
+    }
+    return os;
+}
+
+/** Converts a @ref FFT1DInfo to string
+ *
+ * @param[in] fft_dir FFT1DInfo value to be converted
+ *
+ * @return String representing the corresponding FFT1DInfo
+ */
+inline std::string to_string(const FFTDirection &fft_dir)
+{
+    std::stringstream str;
+    str << "{" << fft_dir << "}";
+    return str.str();
+}
+
+/** Formatted output of the FFT1DInfo type.
+ *
+ * @param[out] os         Output stream.
+ * @param[in]  fft1d_info FFT1DInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const FFT1DInfo &fft1d_info)
+{
+    os << "{axis=" << fft1d_info.axis << ", "
+       << "direction=" << fft1d_info.direction << "}";
+    return os;
+}
+
+/** Converts a @ref FFT1DInfo to string
+ *
+ * @param[in] fft1d_info FFT1DInfo value to be converted
+ *
+ * @return String representing the corresponding FFT1DInfo
+ */
+inline std::string to_string(const FFT1DInfo &fft1d_info)
+{
+    std::stringstream str;
+    str << fft1d_info;
+    return str.str();
+}
+
+/** Formatted output of the FFT2DInfo type.
+ *
+ * @param[out] os         Output stream.
+ * @param[in]  fft2d_info FFT2DInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const FFT2DInfo &fft2d_info)
+{
+    os << "{axis=" << fft2d_info.axis0 << ", "
+       << "axis=" << fft2d_info.axis1 << ", "
+       << "direction=" << fft2d_info.direction << "}";
+    return os;
+}
+
+/** Converts a @ref FFT2DInfo to string
+ *
+ * @param[in] fft2d_info FFT2DInfo value to be converted
+ *
+ * @return String representing the corresponding FFT2DInfo
+ */
+inline std::string to_string(const FFT2DInfo &fft2d_info)
+{
+    std::stringstream str;
+    str << fft2d_info;
+    return str.str();
+}
+
+/** Formatted output of the Coordinates2D type.
+ *
+ * @param[out] os       Output stream.
+ * @param[in]  coord_2d Coordinates2D to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Coordinates2D &coord_2d)
+{
+    os << "{x=" << coord_2d.x << ", "
+       << "y=" << coord_2d.y << "}";
+    return os;
+}
+
+/** Converts a @ref Coordinates2D to string
+ *
+ * @param[in] coord_2d Coordinates2D value to be converted
+ *
+ * @return String representing the corresponding Coordinates2D
+ */
+inline std::string to_string(const Coordinates2D &coord_2d)
+{
+    std::stringstream str;
+    str << coord_2d;
+    return str.str();
+}
+
+/** Formatted output of the FuseBatchNormalizationType type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  fuse_type FuseBatchNormalizationType to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const FuseBatchNormalizationType &fuse_type)
+{
+    switch(fuse_type)
+    {
+        case FuseBatchNormalizationType::CONVOLUTION:
+            os << "CONVOLUTION";
+            break;
+        case FuseBatchNormalizationType::DEPTHWISECONVOLUTION:
+            os << "DEPTHWISECONVOLUTION";
+            break;
+        default:
+            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
+    }
+    return os;
+}
+
+/** Converts a @ref FuseBatchNormalizationType to string
+ *
+ * @param[in] fuse_type FuseBatchNormalizationType value to be converted
+ *
+ * @return String representing the corresponding FuseBatchNormalizationType
+ */
+inline std::string to_string(const FuseBatchNormalizationType &fuse_type)
+{
+    std::stringstream str;
+    str << fuse_type;
+    return str.str();
+}
+
+/** Formatted output of the SoftmaxKernelInfo type.
+ *
+ * @param[out] os   Output stream.
+ * @param[in]  info SoftmaxKernelInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const SoftmaxKernelInfo &info)
+{
+    os << "{beta=" << info.beta << ", "
+       << "is_log=" << info.is_log << ", "
+       << "input_data_type=" << info.input_data_type << ", "
+       << "axis=" << info.axis << "}";
+    return os;
+}
+
+/** Converts a @ref SoftmaxKernelInfo to string
+ *
+ * @param[in] info SoftmaxKernelInfo value to be converted
+ *
+ * @return String representing the corresponding SoftmaxKernelInfo
+ */
+inline std::string to_string(const SoftmaxKernelInfo &info)
+{
+    std::stringstream str;
+    str << info;
+    return str.str();
+}
+
+/** Formatted output of the ScaleKernelInfo type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  lstm_params LSTMParams to output.
+ *
+ * @return Modified output stream.
+ */
+template <typename T>
+::std::ostream &operator<<(::std::ostream &os, const LSTMParams<T> &lstm_params)
+{
+    os << "{input_to_input_weights=" << to_string(lstm_params.input_to_input_weights()) << ", "
+       << "recurrent_to_input_weights=" << to_string(lstm_params.recurrent_to_input_weights()) << ", "
+       << "cell_to_input_weights=" << to_string(lstm_params.cell_to_input_weights()) << ", "
+       << "input_gate_bias=" << to_string(lstm_params.input_gate_bias()) << ", "
+       << "cell_to_forget_weights=" << to_string(lstm_params.cell_to_forget_weights()) << ", "
+       << "cell_to_output_weights=" << to_string(lstm_params.cell_to_output_weights()) << ", "
+       << "projection_weights=" << to_string(lstm_params.projection_weights()) << ", "
+       << "projection_bias=" << to_string(lstm_params.projection_bias()) << ", "
+       << "input_layer_norm_weights=" << to_string(lstm_params.input_layer_norm_weights()) << ", "
+       << "forget_layer_norm_weights=" << to_string(lstm_params.forget_layer_norm_weights()) << ", "
+       << "cell_layer_norm_weights=" << to_string(lstm_params.cell_layer_norm_weights()) << ", "
+       << "output_layer_norm_weights=" << to_string(lstm_params.output_layer_norm_weights()) << ", "
+       << "cell_clip=" << lstm_params.cell_clip() << ", "
+       << "projection_clip=" << lstm_params.projection_clip() << ", "
+       << "input_intermediate_scale=" << lstm_params.input_intermediate_scale() << ", "
+       << "forget_intermediate_scale=" << lstm_params.forget_intermediate_scale() << ", "
+       << "cell_intermediate_scale=" << lstm_params.cell_intermediate_scale() << ", "
+       << "hidden_state_zero=" << lstm_params.hidden_state_zero() << ", "
+       << "hidden_state_scale=" << lstm_params.hidden_state_scale() << ", "
+       << "has_peephole_opt=" << lstm_params.has_peephole_opt() << ", "
+       << "has_projection=" << lstm_params.has_projection() << ", "
+       << "has_cifg_opt=" << lstm_params.has_cifg_opt() << ", "
+       << "use_layer_norm=" << lstm_params.use_layer_norm() << "}";
+    return os;
+}
+
+/** Converts a @ref LSTMParams to string
+ *
+ * @param[in] lstm_params LSTMParams<T> value to be converted
+ *
+ * @return String representing the corresponding LSTMParams
+ */
+template <typename T>
+std::string to_string(const LSTMParams<T> &lstm_params)
+{
+    std::stringstream str;
+    str << lstm_params;
+    return str.str();
+}
+
+/** Converts a @ref LSTMParams to string
+ *
+ * @param[in] num uint8_t value to be converted
+ *
+ * @return String representing the corresponding uint8_t
+ */
+inline std::string to_string(const uint8_t num)
+{
+    // Explicity cast the uint8_t to signed integer and call the corresponding overloaded to_string() function.
+    return ::std::to_string(static_cast<int>(num));
+}
+
+/** Available non maxima suppression types */
+/** Formatted output of the NMSType type.
+ *
+ * @param[out] os       Output stream.
+ * @param[in]  nms_type NMSType to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const NMSType &nms_type)
+{
+    switch(nms_type)
+    {
+        case NMSType::LINEAR:
+            os << "LINEAR";
+            break;
+        case NMSType::GAUSSIAN:
+            os << "GAUSSIAN";
+            break;
+        case NMSType::ORIGINAL:
+            os << "ORIGINAL";
+            break;
+        default:
+            ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
+    }
+    return os;
+}
+
+/** Converts a @ref NMSType to string
+ *
+ * @param[in] nms_type NMSType value to be converted
+ *
+ * @return String representing the corresponding NMSType
+ */
+inline std::string to_string(const NMSType nms_type)
+{
+    std::stringstream str;
+    str << nms_type;
+    return str.str();
+}
+
+/** Formatted output of the BoxNMSLimitInfo type.
+ *
+ * @param[out] os   Output stream.
+ * @param[in]  info BoxNMSLimitInfo to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const BoxNMSLimitInfo &info)
+{
+    os << "{score_thresh=" << info.score_thresh() << ", "
+       << "nms=" << info.nms() << ", "
+       << "detections_per_im=" << info.detections_per_im() << ", "
+       << "soft_nms_enabled=" << info.soft_nms_enabled() << ", "
+       << "soft_nms_min_score_thres=" << info.soft_nms_min_score_thres() << ", "
+       << "suppress_size=" << info.suppress_size() << ", "
+       << "min_size=" << info.min_size() << ", "
+       << "im_width=" << info.im_width() << ", "
+       << "im_height=" << info.im_height() << "}";
+    return os;
+}
+
+/** Converts a @ref BoxNMSLimitInfo to string
+ *
+ * @param[in] info BoxNMSLimitInfo value to be converted
+ *
+ * @return String representing the corresponding BoxNMSLimitInfo
+ */
+inline std::string to_string(const BoxNMSLimitInfo &info)
+{
+    std::stringstream str;
+    str << info;
+    return str.str();
+}
+
+/** Converts a @ref DimensionRoundingType to string
+ *
+ * @param[in] rounding_type DimensionRoundingType value to be converted
+ *
+ * @return String representing the corresponding DimensionRoundingType
+ */
+inline std::string to_string(const DimensionRoundingType &rounding_type)
+{
+    std::stringstream str;
+    str << rounding_type;
+    return str.str();
+}
+
+/** Formatted output of the Conv3dInfo type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  conv3d_info Type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Conv3dInfo &conv3d_info)
+{
+    os << conv3d_info.stride;
+    os << ";";
+    os << conv3d_info.padding;
+    os << ";";
+    os << to_string(conv3d_info.act_info);
+    os << ";";
+    os << conv3d_info.dilation;
+    os << ";";
+    os << conv3d_info.round_type;
+    os << ";";
+    os << conv3d_info.enable_fast_math;
+
+    return os;
+}
+
+/** Formatted output of the Conv3dInfo type.
+ *
+ * @param[in] conv3d_info Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const Conv3dInfo &conv3d_info)
+{
+    std::stringstream str;
+    str << conv3d_info;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::WeightFormat type.
+ *
+ * @param[in] wf arm_compute::WeightFormat Type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const WeightFormat wf)
+{
+#define __CASE_WEIGHT_FORMAT(wf) \
+    case WeightFormat::wf:       \
+        return #wf;
+    switch(wf)
+    {
+        __CASE_WEIGHT_FORMAT(UNSPECIFIED)
+        __CASE_WEIGHT_FORMAT(ANY)
+        __CASE_WEIGHT_FORMAT(OHWI)
+        __CASE_WEIGHT_FORMAT(OHWIo2)
+        __CASE_WEIGHT_FORMAT(OHWIo4)
+        __CASE_WEIGHT_FORMAT(OHWIo8)
+        __CASE_WEIGHT_FORMAT(OHWIo16)
+        __CASE_WEIGHT_FORMAT(OHWIo32)
+        __CASE_WEIGHT_FORMAT(OHWIo64)
+        __CASE_WEIGHT_FORMAT(OHWIo128)
+        __CASE_WEIGHT_FORMAT(OHWIo4i2)
+        __CASE_WEIGHT_FORMAT(OHWIo4i2_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo8i2)
+        __CASE_WEIGHT_FORMAT(OHWIo8i2_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo16i2)
+        __CASE_WEIGHT_FORMAT(OHWIo16i2_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo32i2)
+        __CASE_WEIGHT_FORMAT(OHWIo32i2_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo64i2)
+        __CASE_WEIGHT_FORMAT(OHWIo64i2_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo4i4)
+        __CASE_WEIGHT_FORMAT(OHWIo4i4_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo8i4)
+        __CASE_WEIGHT_FORMAT(OHWIo8i4_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo16i4)
+        __CASE_WEIGHT_FORMAT(OHWIo16i4_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo32i4)
+        __CASE_WEIGHT_FORMAT(OHWIo32i4_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo64i4)
+        __CASE_WEIGHT_FORMAT(OHWIo64i4_bf16)
+        __CASE_WEIGHT_FORMAT(OHWIo2i8)
+        __CASE_WEIGHT_FORMAT(OHWIo4i8)
+        __CASE_WEIGHT_FORMAT(OHWIo8i8)
+        __CASE_WEIGHT_FORMAT(OHWIo16i8)
+        __CASE_WEIGHT_FORMAT(OHWIo32i8)
+        __CASE_WEIGHT_FORMAT(OHWIo64i8)
+        default:
+            return "invalid value";
+    }
+#undef __CASE_WEIGHT_FORMAT
+}
+
+/** Formatted output of the arm_compute::WeightFormat type.
+ *
+ * @param[out] os Output stream.
+ * @param[in]  wf WeightFormat to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const arm_compute::WeightFormat &wf)
+{
+    os << to_string(wf);
+    return os;
+}
+
+/** Formatted output of the std::tuple<TensorShape, TensorShape, arm_compute::WeightFormat> tuple.
+ *
+ * @param[in] values tuple of input and output tensor shapes and WeightFormat used.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const std::tuple<TensorShape, TensorShape, arm_compute::WeightFormat> values)
+{
+    std::stringstream str;
+    str << "[Input shape = " << std::get<0>(values);
+    str << ", ";
+    str << "Expected output shape = " << std::get<1>(values);
+
+    str << ", ";
+    str << "WeightFormat = " << std::get<2>(values) << "]";
+    return str.str();
+}
+
+/** Formatted output of the Padding2D type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  padding2d Padding info for 2D dimension shape.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const Padding2D &padding2d)
+{
+    os << padding2d.left << "," << padding2d.right << ","
+       << padding2d.top << "," << padding2d.bottom;
+    return os;
+}
+
+/** Converts a @ref Padding2D to string
+ *
+ * @param[in] padding2d Padding2D value to be converted
+ *
+ * @return String representing the corresponding Padding2D
+ */
+inline std::string to_string(const Padding2D &padding2d)
+{
+    std::stringstream str;
+    str << padding2d;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::Pool2dAttributes type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  pool2d_attr arm_compute::experimental::dynamic_fusion::Pool2dAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::Pool2dAttributes &pool2d_attr)
+{
+    os << "Pool2dAttributes="
+       << "["
+       << "PoolingType=" << pool2d_attr.pool_type() << ","
+       << "PoolSize=" << pool2d_attr.pool_size() << ","
+       << "Padding=" << pool2d_attr.pad() << ","
+       << "Stride=" << pool2d_attr.stride() << ","
+       << "ExcludePadding" << pool2d_attr.exclude_padding() << "]";
+
+    return os;
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::Pool2dAttributes type.
+ *
+ * @param[in] pool2d_attr arm_compute::experimental::dynamic_fusion::Pool2dAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::Pool2dAttributes &pool2d_attr)
+{
+    std::stringstream str;
+    str << pool2d_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::GpuPool2dSettings type
+ *
+ * @param[out] os       Output stream
+ * @param[in]  settings arm_compute::dynamic_fusion::GpuPool2dSettings type to output
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::GpuPool2dSettings &settings)
+{
+    os << "Settings="
+       << "["
+       << "FPMixedPrecision=" << settings.mixed_precision() << "]";
+    return os;
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::GpuPool2dSettings type.
+ *
+ * @param[in] settings arm_compute::experimental::dynamic_fusion::GpuPool2dSettings type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::GpuPool2dSettings &settings)
+{
+    std::stringstream str;
+    str << settings;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::Conv2dAttributes type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  conv2d_attr arm_compute::experimental::dynamic_fusion::Conv2dAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::Conv2dAttributes &conv2d_attr)
+{
+    os << "Conv2dAttributes="
+       << "["
+       << "Padding=" << conv2d_attr.pad() << ", "
+       << "Size2D=" << conv2d_attr.stride() << ", "
+       << "Dialation=" << conv2d_attr.dilation() << "]";
+
+    return os;
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::Conv2dAttributes type.
+ *
+ * @param[in] conv2d_attr arm_compute::experimental::dynamic_fusion::Conv2dAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::Conv2dAttributes &conv2d_attr)
+{
+    std::stringstream str;
+    str << conv2d_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::CastAttributes type.
+ *
+ * @param[out] os        Output stream.
+ * @param[in]  cast_attr arm_compute::experimental::dynamic_fusion::CastAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::CastAttributes &cast_attr)
+{
+    os << "CastAttributes="
+       << "["
+       << "Data Type=" << cast_attr.data_type() << ", "
+       << "Convert Policy=" << cast_attr.convert_policy() << "]";
+
+    return os;
+}
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::CastAttributes type.
+ *
+ * @param[in] cast_attr arm_compute::experimental::dynamic_fusion::CastAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::CastAttributes &cast_attr)
+{
+    std::stringstream str;
+    str << cast_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::DepthwiseConv2dAttributes type.
+ *
+ * @param[out] os             Output stream.
+ * @param[in]  dw_conv2d_attr arm_compute::experimental::dynamic_fusion::DepthwiseConv2dAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::DepthwiseConv2dAttributes &dw_conv2d_attr)
+{
+    os << "DepthwiseConv2dAttributes="
+       << "["
+       << "Padding=" << dw_conv2d_attr.pad() << ", "
+       << "Size2D=" << dw_conv2d_attr.stride() << ", "
+       << "Depth Multiplier=" << dw_conv2d_attr.depth_multiplier() << ", "
+       << "Dilation=" << dw_conv2d_attr.dilation() << ","
+       << "DimensionRoundingType: " << dw_conv2d_attr.dimension_rounding_type() << "]";
+
+    return os;
+}
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::DepthwiseConv2dAttributes type.
+ *
+ * @param[in] dw_conv2d_attr arm_compute::experimental::dynamic_fusion::DepthwiseConv2dAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::DepthwiseConv2dAttributes &dw_conv2d_attr)
+{
+    std::stringstream str;
+    str << dw_conv2d_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::ClampAttributes type.
+ *
+ * @param[out] os         Output stream.
+ * @param[in]  clamp_attr arm_compute::experimental::dynamic_fusion::ClampAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::ClampAttributes &clamp_attr)
+{
+    os << "ClampAttributes="
+       << "["
+       << "Min value=" << clamp_attr.min_val() << ", "
+       << "Max value=" << clamp_attr.max_val() << "]";
+    return os;
+}
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::ClampAttributes type.
+ *
+ * @param[in] clamp_attr arm_compute::experimental::dynamic_fusion::ClampAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::ClampAttributes &clamp_attr)
+{
+    std::stringstream str;
+    str << clamp_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::ResizeAttributes type.
+ *
+ * @param[out] os          Output stream.
+ * @param[in]  resize_attr arm_compute::experimental::dynamic_fusion::ResizeAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::ResizeAttributes &resize_attr)
+{
+    os << "ResizeAttributes="
+       << "["
+       << "AlignCorners=" << resize_attr.align_corners() << ", "
+       << "InterpolationPolicy=" << resize_attr.interpolation_policy() << ", "
+       << "OutputHeight=" << resize_attr.output_height() << ", "
+       << "OutputWidth=" << resize_attr.output_width() << ", "
+       << "SamplingPolicy=" << resize_attr.sampling_policy() << "]";
+    return os;
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::ResizeAttributes type.
+ *
+ * @param[in] resize_attr arm_compute::experimental::dynamic_fusion::ResizeAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::ResizeAttributes &resize_attr)
+{
+    std::stringstream str;
+    str << resize_attr;
+    return str.str();
+}
+
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::SoftmaxAttributes type.
+ *
+ * @param[out] os           Output stream.
+ * @param[in]  softmax_attr arm_compute::experimental::dynamic_fusion::SoftmaxAttributes type to output.
+ *
+ * @return Modified output stream.
+ */
+inline ::std::ostream &operator<<(::std::ostream &os, const experimental::dynamic_fusion::SoftmaxAttributes &softmax_attr)
+{
+    os << "SoftmaxAttributes="
+       << "["
+       << "Beta=" << softmax_attr.beta() << ", "
+       << "Is Log Softmax=" << softmax_attr.is_log_softmax() << ", "
+       << "Axis=" << softmax_attr.axis() << "]";
+    return os;
+}
+/** Formatted output of the arm_compute::experimental::dynamic_fusion::SoftmaxAttributes type.
+ *
+ * @param[in] softmax_attr arm_compute::experimental::dynamic_fusion::SoftmaxAttributes type to output.
+ *
+ * @return Formatted string.
+ */
+inline std::string to_string(const experimental::dynamic_fusion::SoftmaxAttributes &softmax_attr)
+{
+    std::stringstream str;
+    str << softmax_attr;
+    return str.str();
 }
 
 } // namespace arm_compute

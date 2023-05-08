@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,10 +59,15 @@ protected:
     {
         switch(tensor.data_type())
         {
-            case DataType::F32:
             case DataType::F16:
             {
-                std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
+                arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
+                library->fill(tensor, distribution, 0);
+                break;
+            }
+            case DataType::F32:
+            {
+                std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
                 library->fill(tensor, distribution, 0);
                 break;
             }
@@ -75,7 +80,7 @@ protected:
             case DataType::QASYMM8:
             {
                 std::pair<int, int> bounds = get_quantized_bounds(tensor.quantization_info(), -1.0f, 1.0f);
-                std::uniform_int_distribution<uint8_t> distribution(bounds.first, bounds.second);
+                std::uniform_int_distribution<uint32_t> distribution(bounds.first, bounds.second);
 
                 library->fill(tensor, distribution, 0);
                 break;
@@ -83,7 +88,7 @@ protected:
             case DataType::QASYMM8_SIGNED:
             {
                 std::pair<int, int> bounds = get_quantized_qasymm8_signed_bounds(tensor.quantization_info(), -1.0f, 1.0f);
-                std::uniform_int_distribution<int8_t> distribution(bounds.first, bounds.second);
+                std::uniform_int_distribution<int32_t> distribution(bounds.first, bounds.second);
 
                 library->fill(tensor, distribution, 0);
                 break;
@@ -103,15 +108,15 @@ protected:
         FunctionType arg_min_max_layer;
         arg_min_max_layer.configure(&src, axis, &dst, op);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src));
