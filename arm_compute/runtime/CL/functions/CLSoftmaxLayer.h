@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,6 +24,8 @@
 #ifndef ARM_COMPUTE_CLSOFTMAXLAYER_H
 #define ARM_COMPUTE_CLSOFTMAXLAYER_H
 
+#include "arm_compute/runtime/CL/CLTensor.h"
+#include "arm_compute/runtime/CL/functions/CLPermute.h"
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/IMemoryManager.h"
 #include "arm_compute/runtime/MemoryGroup.h"
@@ -32,9 +34,11 @@
 
 namespace arm_compute
 {
+class CLCompileContext;
+class CLLogits1DMaxShiftExpSumKernel;
+class CLLogits1DNormKernel;
 class ICLTensor;
 class ITensorInfo;
-class CLCompileContext;
 
 /** Basic function to compute a SoftmaxLayer.
  *
@@ -44,11 +48,11 @@ class CLCompileContext;
  * Log Softmax is calculated by :
  * @f[ out = (x - max(x) * beta) - log(\sum{e^{x - max(x) * beta}}) @f]
  *
- * This function runs the following operators/kernels:
+ * This function runs the following kernels:
  * -# If axis is not 0:
- * -# @ref opencl::ClPermute
- * -# @ref opencl::kernels::ClLogits1DNormKernel
- * -# @ref opencl::kernels::ClLogits1DMaxShiftExpSumKernel
+ * -#   @ref CLPermute
+ * -# @ref CLLogits1DNormKernel
+ * -# @ref CLLogits1DMaxShiftExpSumKernel
  */
 template <bool IS_LOG = false>
 class CLSoftmaxLayerGeneric : public IFunction
@@ -56,20 +60,17 @@ class CLSoftmaxLayerGeneric : public IFunction
 public:
     /** Constructor */
     CLSoftmaxLayerGeneric(std::shared_ptr<IMemoryManager> memory_manager = nullptr);
+    /** Prevent instances of this class from being copied */
+    CLSoftmaxLayerGeneric(const CLSoftmaxLayerGeneric &) = delete;
+    /** Prevent instances of this class from being copied */
+    CLSoftmaxLayerGeneric &operator=(const CLSoftmaxLayerGeneric &) = delete;
+    /** Prevent instances of this class to be moved */
+    CLSoftmaxLayerGeneric(CLSoftmaxLayerGeneric &&) = delete;
+    /** Prevent instances of this class to be moved */
+    CLSoftmaxLayerGeneric &operator=(CLSoftmaxLayerGeneric &&) = delete;
     /** Default destructor */
     ~CLSoftmaxLayerGeneric();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |QASYMM8        |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED |
-     * |F16            |F16            |
-     * |F32            |F32            |
      *
      * @param[in]  input  Source tensor. Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32 for Softmax and F16/F32 for Log Softmax
      * @param[out] output Destination tensor. Data types supported: same as @p input
@@ -104,8 +105,17 @@ public:
     void run() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    MemoryGroup                                     _memory_group;
+    CLPermute                                       _permute_input;
+    CLPermute                                       _permute_output;
+    std::unique_ptr<CLLogits1DMaxShiftExpSumKernel> _max_shift_exp_sum_kernel;
+    std::unique_ptr<CLLogits1DNormKernel>           _norm_kernel;
+    CLTensor                                        _max;
+    CLTensor                                        _sum;
+    CLTensor                                        _tmp;
+    CLTensor                                        _input_permuted;
+    CLTensor                                        _output_permuted;
+    bool                                            _needs_permute;
 };
 
 using CLSoftmaxLayer    = CLSoftmaxLayerGeneric<false>;

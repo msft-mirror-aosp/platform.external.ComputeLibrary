@@ -27,6 +27,7 @@
 #include "arm_compute/runtime/IAllocator.h"
 #include "arm_compute/runtime/IMemoryGroup.h"
 #include "arm_compute/runtime/OffsetMemoryPool.h"
+#include "support/MemorySupport.h"
 
 #include <algorithm>
 #include <cmath>
@@ -56,7 +57,7 @@ const OffsetLifetimeManager::info_type &OffsetLifetimeManager::info() const
 std::unique_ptr<IMemoryPool> OffsetLifetimeManager::create_pool(IAllocator *allocator)
 {
     ARM_COMPUTE_ERROR_ON(allocator == nullptr);
-    return std::make_unique<OffsetMemoryPool>(allocator, _blob);
+    return support::cpp14::make_unique<OffsetMemoryPool>(allocator, _blob);
 }
 
 MappingType OffsetLifetimeManager::mapping_type() const

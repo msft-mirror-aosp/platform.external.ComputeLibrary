@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -91,6 +91,8 @@ private:
     float    _epsilon;
 
     using MeanStdDevNormFunction = void (NEMeanStdDevNormalizationKernel::*)(const Window &window);
+
+    MeanStdDevNormFunction _func;
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NEMEANSTDDEVNORMALIZATIONKERNEL_H */

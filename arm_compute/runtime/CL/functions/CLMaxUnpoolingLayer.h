@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,7 +25,6 @@
 #define ARM_COMPUTE_CLMAXUNPOOLINGLAYER_H
 
 #include "arm_compute/core/Error.h"
-#include "arm_compute/runtime/CL/functions/CLFill.h"
 #include "arm_compute/runtime/IFunction.h"
 
 #include <memory>
@@ -36,11 +35,12 @@ class CLCompileContext;
 class ICLTensor;
 class ITensorInfo;
 class CLMaxUnpoolingLayerKernel;
+class CLMemsetKernel;
 struct PoolingLayerInfo;
 
 /** Function to perform MaxUnpooling. This function calls the following OpenCL kernels:
  *
- * -# @ref CLFill
+ * -# @ref CLMemsetKernel
  * -# @ref CLMaxUnpoolingLayerKernel
  */
 class CLMaxUnpoolingLayer : public IFunction
@@ -55,18 +55,6 @@ public:
     /** Default destructor */
     ~CLMaxUnpoolingLayer();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |QASYMM8        |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED |
-     * |F16            |F16            |
-     * |F32            |F32            |
      *
      * @note Output shape must be equal to the shape of the original input to pool.
      *
@@ -111,7 +99,7 @@ public:
     void run() override;
 
 private:
-    CLFill                                     _fill;
+    std::unique_ptr<CLMemsetKernel>            _memset_kernel;
     std::unique_ptr<CLMaxUnpoolingLayerKernel> _unpooling_layer_kernel;
 };
 }

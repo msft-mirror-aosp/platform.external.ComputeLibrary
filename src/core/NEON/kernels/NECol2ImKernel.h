@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,9 +32,9 @@ namespace arm_compute
 {
 class ITensor;
 
-/** Kernel to perform col2im reshaping.
+/** NEON kernel to perform col2im reshaping.
  *
- * Rearranges each matrix column into image blocks. It's the inverse operation of @ref cpu::kernels::CpuIm2ColKernel.
+ * Rearranges each matrix column into image blocks. It's the inverse operation of @ref NEIm2ColKernel.
  *
  * For example, a vector of 9 elements can be reshaped to a block(image) of 3x3:
  *

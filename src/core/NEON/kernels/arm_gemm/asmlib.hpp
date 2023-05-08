@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018,2021 Arm Limited.
+ * Copyright (c) 2017-2018 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,10 +32,12 @@
 
 // "Correct" version
 #define ASM_PREFETCH(address)    "PRFM PLDL1KEEP, " address "\n"
-#define ASM_PREFETCHU(address)   "PRFUM PLDL1KEEP, " address "\n"
 #define ASM_PREFETCHL2(address)  "PRFM PLDL2KEEP, " address "\n"
 #define ASM_PREFETCHW(address)   "PRFM PSTL1KEEP, " address "\n"
 #define ASM_PREFETCHWL2(address) "PRFM PSTL2KEEP, " address "\n"
+
+// Lee's uarchsim hack
+//#define ASM_PREFETCH(address)	"LDNP x20, x21, " address "\n"
 
 // No preload at all
 //#define ASM_PREFETCH(address) ""

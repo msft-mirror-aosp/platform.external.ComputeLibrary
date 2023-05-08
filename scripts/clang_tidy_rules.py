@@ -1,45 +1,25 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-# Copyright (c) 2017-2023 Arm Limited.
-#
-# SPDX-License-Identifier: MIT
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to
-# deal in the Software without restriction, including without limitation the
-# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-# sell copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 import os
 import re
 import sys
 
 def get_list_includes():
-    return "src/cpu/kernels/assembly " \
+    return "arm_compute/core/NEON/kernels/assembly " \
+           "arm_compute/core/NEON/kernels/convolution/common " \
+           "arm_compute/core/NEON/kernels/convolution/depthwise " \
+           "arm_compute/core/NEON/kernels/convolution/winograd " \
            "src/core/NEON/kernels/assembly " \
            "src/core/NEON/kernels/convolution/winograd " \
            "include/linux include " \
-           ". ".split()
+           ". " \
+           "3rdparty/include kernels".split()
 
 def get_list_flags( filename, arch):
     assert arch in ["armv7", "aarch64"]
-    flags = ["-std=c++14"]
+    flags = ["-std=c++11"]
     flags.append("-DARM_COMPUTE_CPP_SCHEDULER=1")
     flags.append("-DARM_COMPUTE_CL")
-    flags.append("-DARM_COMPUTE_OPENCL_ENABLED")
+    flags.append("-DARM_COMPUTE_GC")
     if arch == "aarch64":
         flags.append("-DARM_COMPUTE_AARCH64_V8_2")
     return flags
@@ -64,9 +44,6 @@ def filter_clang_tidy_lines( lines ):
     for i in range(0, len(lines)):
         line = lines[i]
 
-        if "/arm_conv/" in line:
-            continue
-
         if "/arm_gemm/" in line:
             continue
 
@@ -87,8 +64,7 @@ def filter_clang_tidy_lines( lines ):
                 ("Utils.h" in line and "no member named 'unmap' in 'arm_compute::Tensor'" in line) or
                 ("Utils.h" in line and "no member named 'map' in 'arm_compute::Tensor'" in line) or
                 ("CPUUtils.cpp" in line and "'asm/hwcap.h' file not found" in line) or
-                ("CPUUtils.cpp" in line and "use of undeclared identifier 'HWCAP_SVE'" in line) or
-               ("sve" in line) or
+                "3rdparty" in line or
                 ("'arm_compute_version.embed' file not found" in line) ):
                 print_context=False
                 continue
@@ -109,6 +85,7 @@ def filter_clang_tidy_lines( lines ):
                ("TensorAllocator.cpp" in line and "warning: do not declare C-style arrays" in line) or
                ("RawTensor.cpp" in line and "warning: pointer parameter 'ptr' can be pointer to const" in line) or
                ("RawTensor.cpp" in line and "warning: do not declare C-style arrays" in line) or
+               ("GCBufferAllocator.cpp" in line and "warning: initializing non-owner" in line) or
                ("NEMinMaxLocationKernel.cpp" in line and "move constructors should be marked noexcept" in line) or
                ("NEMinMaxLocationKernel.cpp" in line and "move assignment operators should be marked noexcept" in line) or
                ("CLMinMaxLocationKernel.cpp" in line and "Forming reference to null pointer" in line) or
@@ -134,15 +111,16 @@ def filter_clang_tidy_lines( lines ):
                ("NEWinogradLayerKernel.cpp" in line and "use '= default' to define a trivial destructor" in line) or
                ("NEGEMMLowpMatrixMultiplyCore.cpp" in line and "constructor does not initialize these fields" in line) or
                ("NEGEMMLowpAssemblyMatrixMultiplyCore" in line and "constructor does not initialize these fields" in line) or
-               ("CpuDepthwiseConv2dNativeKernel" in line and re.search(r"parameter '[^']+' is unused", line)) or
-               ("CpuDepthwiseConv2dAssemblyDispatch" in line and re.search(r"parameter '[^']+' is unused", line)) or
-               ("CpuDepthwiseConv2dAssemblyDispatch" in line and "modernize-use-equals-default" in line) or
+               ("NEDepthwiseConvolutionLayerNativeKernel" in line and re.search(r"parameter '[^']+' is unused", line)) or
+               ("NEDepthwiseConvolutionAssemblyDispatch" in line and re.search(r"parameter '[^']+' is unused", line)) or
                ("CPUUtils.cpp" in line and "consider replacing 'unsigned long' with 'uint64'" in line) or
                ("CPUUtils.cpp" in line and "parameter 'cpusv' is unused" in line) or
                ("CPUUtils.cpp" in line and "warning: uninitialized record type" in line) or
+               ("GCKernelLibrary.cpp" in line and "warning: do not declare C-style arrays" in line) or
                ("Utils.h" in line and "warning: Use of zero-allocated memory" in line) or
-               ("sve" in line) or
-               ("CpuDepthwiseConv2dNativeKernel.cpp" in line and "misc-non-private-member-variables-in-classes" in line)): # This is to prevent false positive, should be reassessed with the newer clang-tidy
+               ("NEDepthwiseConvolutionLayerNativeKernel.cpp" in line and "misc-non-private-member-variables-in-classes" in line) or # This is to prevent false positive, should be reassessed with the newer clang-tidy
+               ("NEDepthwiseConvolutionLayerNativeKernel.cpp" in line and "cppcoreguidelines-pro-type-member-init" in line) or # This is to prevent false positive, should be reassessed with the newer clang-tidy
+               "3rdparty" in line):
                 print_context=False
                 continue
 

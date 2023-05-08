@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,13 +31,12 @@
 #include "arm_compute/runtime/CL/CLScheduler.h"
 
 #include "src/core/CL/kernels/CLBatchToSpaceLayerKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 CLBatchToSpaceLayer::CLBatchToSpaceLayer()
-    : _batch_to_space_kernel(std::make_unique<CLBatchToSpaceLayerKernel>())
+    : _batch_to_space_kernel(support::cpp14::make_unique<CLBatchToSpaceLayerKernel>())
 {
 }
 
@@ -50,7 +49,6 @@ void CLBatchToSpaceLayer::configure(const ICLTensor *input, const ICLTensor *blo
 
 void CLBatchToSpaceLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, const ICLTensor *block_shape, ICLTensor *output)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, block_shape, output);
     _batch_to_space_kernel->configure(compile_context, input, block_shape, output);
 }
 
@@ -61,7 +59,6 @@ void CLBatchToSpaceLayer::configure(const ICLTensor *input, int32_t block_shape_
 
 void CLBatchToSpaceLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, int32_t block_shape_x, int32_t block_shape_y, ICLTensor *output)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, block_shape_x, block_shape_y, output);
     _batch_to_space_kernel->configure(compile_context, input, block_shape_x, block_shape_y, output);
 }
 

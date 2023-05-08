@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -71,12 +71,11 @@ public:
      *
      * @param[in] dimension            Dimension for which the value is set.
      * @param[in] value                Value to be set for the dimension.
-     * @param[in] apply_dim_correction (Optional) Flag to state whether apply dimension correction after setting one dimension. E.g. when permuting NCHW -> NHWC, 1x1x2 would become 2x1x1, but _num_dimensions should be 3 rather than 1.
-     * @param[in] increase_dim_unit    (Optional) Set to true if new unit dimensions increase the number of dimensions of the shape.
+     * @param[in] apply_dim_correction Flag to state whether apply dimension correction after setting one dimension. E.g. when permuting NCHW -> NHWC, 1x1x2 would become 2x1x1, but _num_dimensions should be 3 rather than 1.
      *
      * @return *this.
      */
-    TensorShape &set(size_t dimension, size_t value, bool apply_dim_correction = true, bool increase_dim_unit = true)
+    TensorShape &set(size_t dimension, size_t value, bool apply_dim_correction = true)
     {
         // Clear entire shape if one dimension is zero
         if(value == 0)
@@ -91,7 +90,7 @@ public:
 
             // Set the specified dimension and increase the number of dimensions if
             // necessary
-            Dimensions::set(dimension, value, increase_dim_unit);
+            Dimensions::set(dimension, value);
 
             // Correct number dimensions to ignore trailing dimensions of size 1
             if(apply_dim_correction)

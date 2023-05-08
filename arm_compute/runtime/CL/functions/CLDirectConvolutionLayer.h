@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -33,6 +33,8 @@
 namespace arm_compute
 {
 class CLCompileContext;
+class CLDirectConvolutionLayerKernel;
+class CLFillBorderKernel;
 class ICLTensor;
 class ITensorInfo;
 
@@ -41,31 +43,15 @@ class ITensorInfo;
 class CLDirectConvolutionLayer : public IFunction
 {
 public:
-    /** Constructor */
+    /** Default constructor */
     CLDirectConvolutionLayer();
-    /** Destructor */
-    ~CLDirectConvolutionLayer();
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    /** Prevent instances of this class from being copied */
     CLDirectConvolutionLayer(const CLDirectConvolutionLayer &) = delete;
-    /** Default move constructor */
-    CLDirectConvolutionLayer(CLDirectConvolutionLayer &&);
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    /** Prevent instances of this class from being copied */
     CLDirectConvolutionLayer &operator=(const CLDirectConvolutionLayer &) = delete;
-    /** Default move assignment operator */
-    CLDirectConvolutionLayer &operator=(CLDirectConvolutionLayer &&);
+    /** Default destructor */
+    ~CLDirectConvolutionLayer();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0           |src1           |src2   |dst            |
-     * |:--------------|:--------------|:------|:--------------|
-     * |F16            |F16            |F16    |F16            |
-     * |F32            |F32            |F32    |F32            |
-     * |QASYMM8        |QASYMM8        |S32    |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED |S32    |QASYMM8_SIGNED |
      *
      * @param[in]  input     Source tensor. 3 lower dimensions represent a single input [width, height, IFM],
      *                       while every optional dimension from 4 and above represent a batch of inputs.
@@ -117,8 +103,11 @@ public:
     void run() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<CLDirectConvolutionLayerKernel> _direct_conv_kernel;
+    std::unique_ptr<CLFillBorderKernel>             _input_border_handler;
+    CLActivationLayer                               _activationlayer_function;
+
+    bool _is_activationlayer_enabled;
 };
 }
 #endif /* ARM_COMPUTE_CLDIRECTCONVOLUTIONLAYER_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,8 +32,7 @@
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
 #include "src/core/CL/kernels/CLL2NormalizeLayerKernel.h"
 #include "src/core/CL/kernels/CLReductionOperationKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -45,7 +44,7 @@ constexpr int max_input_tensor_dim = 3;
 CLL2NormalizeLayer::CLL2NormalizeLayer(std::shared_ptr<IMemoryManager> memory_manager)
     : _memory_group(std::move(memory_manager)),
       _reduce_func(),
-      _normalize_kernel(std::make_unique<CLL2NormalizeLayerKernel>()),
+      _normalize_kernel(support::cpp14::make_unique<CLL2NormalizeLayerKernel>()),
       _sumsq()
 {
 }
@@ -59,8 +58,6 @@ void CLL2NormalizeLayer::configure(ICLTensor *input, ICLTensor *output, int axis
 
 void CLL2NormalizeLayer::configure(const CLCompileContext &compile_context, ICLTensor *input, ICLTensor *output, int axis, float epsilon)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, output, axis, epsilon);
-
     // Reset auxiliary tensor
     _sumsq.allocator()->init(TensorInfo());
 

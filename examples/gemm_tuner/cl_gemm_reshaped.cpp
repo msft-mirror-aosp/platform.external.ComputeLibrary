@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -33,8 +33,8 @@
 #include "arm_compute/runtime/CL/CLTuner.h"
 #include "examples/gemm_tuner/CommonGemmExampleOptions.h"
 #include "examples/gemm_tuner/GemmTunerHelpers.h"
-#include "src/gpu/cl/kernels/ClGemmMatrixMultiplyReshapedKernel.h"
-#include "src/gpu/cl/kernels/ClGemmReshapeLhsMatrixKernel.h"
+#include "src/core/CL/kernels/CLGEMMMatrixMultiplyReshapedKernel.h"
+#include "src/core/CL/kernels/CLGEMMReshapeLHSMatrixKernel.h"
 #include "tests/CL/Helper.h"
 #include "utils/Utils.h"
 #include "utils/command_line/CommandLineOptions.h"
@@ -43,7 +43,6 @@
 #include <cstdlib>
 
 using namespace arm_compute;
-using namespace arm_compute::opencl::kernels;
 using namespace utils;
 using namespace arm_compute::misc::shape_calculator;
 using namespace gemm_tuner;
@@ -173,11 +172,10 @@ GemmConfigs consume_gemm_configs(const GemmConfigOptions &options)
 }
 
 } // namespace
-
-// Create function for ClGemmReshapeLhsMatrixKernel
-using CLGEMMReshapeLHSMatrix = test::CLSynthetizeOperator<ClGemmReshapeLhsMatrixKernel>;
-// Create function for ClGemmMatrixMultiplyReshapedKernel
-using CLGEMMMatrixMultiplyReshaped = test::CLSynthetizeOperator<ClGemmMatrixMultiplyReshapedKernel>;
+// Create function for CLGEMMReshapeLHSMatrixKernel
+using CLGEMMReshapeLHSMatrix = test::CLSynthetizeFunction<CLGEMMReshapeLHSMatrixKernel>;
+// Create function for CLGEMMMatrixMultiplyReshapedKernel
+using CLGEMMMatrixMultiplyReshaped = test::CLSynthetizeFunction<CLGEMMMatrixMultiplyReshapedKernel>;
 
 class CLGEMMMatrixMultiplyReshapedExample : public Example
 {
@@ -224,8 +222,6 @@ public:
         std::cout << "Gemm configurations:" << std::endl;
         std::cout << configs << std::endl;
 
-        tuner.set_tuner_mode(params.tuner_mode);
-
         CLScheduler::get().default_init(&tuner);
 
         lhs.allocator()->init(TensorInfo(TensorShape(params.K, params.M, params.B), 1, params.data_type));
@@ -264,16 +260,12 @@ public:
 
         if(rhs_info.export_to_cl_image)
         {
-            if(!examples::gemm_tuner_helpers::update_padding_for_cl_image(rhs_reshaped.info()))
-            {
-                std::cerr << "cl_image is not supported on the device, disable export_to_cl_image" << std::endl;
-                return false;
-            }
+            examples::gemm_tuner_helpers::update_padding_for_cl_image(rhs_reshaped.info());
         }
 
         // Validate argments
         Status status{};
-        status = reshape_lhs.validate(lhs.info(), lhs_reshaped.info(), lhs_info, kernel_info.reinterpret_input_as_3d);
+        status = reshape_lhs.validate((&lhs)->info(), (&lhs_reshaped)->info(), lhs_info, kernel_info.reinterpret_input_as_3d);
         if(!status)
         {
             // Unsupported arguments
@@ -282,7 +274,7 @@ public:
             return false;
         }
 
-        status = gemm.validate(lhs_reshaped.info(), rhs_reshaped.info(), bias.info(), dst.info(), alpha, beta, lhs_info, rhs_info, kernel_info);
+        status = gemm.validate((&lhs_reshaped)->info(), (&rhs_reshaped)->info(), (&bias)->info(), (&dst)->info(), alpha, beta, lhs_info, rhs_info, kernel_info);
         if(!status)
         {
             // Unsupported arguments
@@ -292,10 +284,10 @@ public:
         }
 
         // Configure reshape lhs function
-        reshape_lhs.configure(lhs.info(), lhs_reshaped.info(), lhs_info);
+        reshape_lhs.configure(&lhs, &lhs_reshaped, lhs_info);
 
         // Configure function
-        gemm.configure(lhs_reshaped.info(), rhs_reshaped.info(), bias.info(), dst.info(), alpha, beta, lhs_info, rhs_info, kernel_info);
+        gemm.configure(&lhs_reshaped, &rhs_reshaped, &bias, &dst, alpha, beta, lhs_info, rhs_info, kernel_info);
 
         // Allocate tensors
         lhs.allocator()->allocate();
@@ -309,16 +301,9 @@ public:
     }
     void do_run() override
     {
-        // Execute the functions
-        ITensorPack reshape_lsh_pack({ { ACL_SRC, &lhs }, { ACL_DST, &lhs_reshaped } });
-        reshape_lhs.run(reshape_lsh_pack);
-
-        ITensorPack gemm_pack({ { ACL_SRC_0, &lhs_reshaped },
-            { ACL_SRC_1, &rhs_reshaped },
-            { ACL_SRC_2, &bias },
-            { ACL_DST, &dst }
-        });
-        gemm.run(gemm_pack);
+        // Execute the function
+        reshape_lhs.run();
+        gemm.run();
 
         // Make sure all the OpenCL jobs are done executing:
         CLScheduler::get().sync();
@@ -343,7 +328,7 @@ private:
 /** Main program for gemm reshaped test
  *
  * @param[in] argc Number of arguments
- * @param[in] argv Arguments ( [optional] M, [optional] N, [optional] K, [optional] B, [optional] m0, [optional] n0, [optional] k0, [optional] v0, [optional] h0, [optional] interleave_lhs, [optional] interleave_rhs, [optional] transpose_rhs, [optional] export_to_cl_image )
+ * @param[in] argv Arguments ( [optional] M, [optional] N, [optional] K, [optional] B, [optional] m0, [optional] n0, [optional] k0, [optional] v0, [optional] h0, [optional] interleave_lhs, [optional] interleave_rhs, [optional] transpose_rhs )
  */
 int main(int argc, char **argv)
 {

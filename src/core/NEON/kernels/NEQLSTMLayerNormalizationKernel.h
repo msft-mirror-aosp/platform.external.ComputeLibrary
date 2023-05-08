@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,7 +31,7 @@ namespace arm_compute
 {
 class ITensor;
 
-/** Kernel to perform layer normalization for QLSTM. */
+/** NEON kernel to perform layer normalization */
 class NEQLSTMLayerNormalizationKernel : public INEKernel
 {
 public:

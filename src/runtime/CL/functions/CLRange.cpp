@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,8 +28,7 @@
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "src/core/CL/kernels/CLRangeKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 using namespace arm_compute;
 
@@ -40,8 +39,7 @@ void CLRange::configure(ICLTensor *output, const float start, const float end, c
 
 void CLRange::configure(const CLCompileContext &compile_context, ICLTensor *output, const float start, const float end, const float step)
 {
-    ARM_COMPUTE_LOG_PARAMS(output, start, end, step);
-    auto k = std::make_unique<CLRangeKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<CLRangeKernel>();
     k->set_target(CLScheduler::get().target());
     k->configure(compile_context, output, start, end, step);
     _kernel = std::move(k);

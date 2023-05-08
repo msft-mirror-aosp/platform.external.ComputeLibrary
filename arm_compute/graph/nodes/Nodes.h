@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -43,8 +43,6 @@
 #include "arm_compute/graph/nodes/FlattenLayerNode.h"
 #include "arm_compute/graph/nodes/FullyConnectedLayerNode.h"
 #include "arm_compute/graph/nodes/FusedConvolutionBatchNormalizationNode.h"
-#include "arm_compute/graph/nodes/FusedConvolutionBatchNormalizationWithPostOpsNode.h"
-#include "arm_compute/graph/nodes/FusedConvolutionWithPostOpNode.h"
 #include "arm_compute/graph/nodes/FusedDepthwiseConvolutionBatchNormalizationNode.h"
 #include "arm_compute/graph/nodes/GenerateProposalsLayerNode.h"
 #include "arm_compute/graph/nodes/InputNode.h"
@@ -69,5 +67,7 @@
 #include "arm_compute/graph/nodes/SplitLayerNode.h"
 #include "arm_compute/graph/nodes/StackLayerNode.h"
 #include "arm_compute/graph/nodes/StridedSliceLayerNode.h"
+#include "arm_compute/graph/nodes/UpsampleLayerNode.h"
+#include "arm_compute/graph/nodes/YOLOLayerNode.h"
 
 #endif /* ARM_COMPUTE_GRAPH_NODES_H */

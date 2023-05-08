@@ -23,7 +23,7 @@
  */
 #pragma once
 
-#ifdef ARM_COMPUTE_ENABLE_SVE
+#ifdef __ARM_FEATURE_SVE
 
 
 
@@ -85,4 +85,4 @@ public:
 
 } // namespace arm_gemm
 
-#endif // ARM_COMPUTE_ENABLE_SVE
+#endif // __ARM_FEATURE_SVE

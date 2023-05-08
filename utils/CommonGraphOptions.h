@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -40,7 +40,7 @@ namespace utils
  *
  * --help             : Print the example's help message.
  * --threads          : The number of threads to be used by the example during execution.
- * --target           : Execution target to be used by the examples. Supported target options: Neon, CL, CLVK.
+ * --target           : Execution target to be used by the examples. Supported target options: NEON, CL, GC.
  * --type             : Data type to be used by the examples. Supported data type options: QASYMM8, F16, F32.
  * --layout           : Data layout to be used by the examples. Supported data layout options : NCHW, NHWC.
  * --enable-tuner     : Toggle option to enable the OpenCL dynamic tuner.
@@ -62,6 +62,7 @@ namespace utils
  *
  * Note that data, image and labels options should be provided to perform an inference run on an image.
  * Note that validation-file and validation-path should be provided to perform a graph accuracy estimation.
+ * Note GLES target is not supported for most of the networks.
  *
  * Example execution commands:
  *
@@ -94,7 +95,6 @@ struct CommonGraphParams
 {
     bool                             help{ false };
     int                              threads{ 0 };
-    int                              batches{ 1 };
     arm_compute::graph::Target       target{ arm_compute::graph::Target::NEON };
     arm_compute::DataType            data_type{ DataType::F32 };
     arm_compute::DataLayout          data_layout{ DataLayout::NHWC };
@@ -108,7 +108,6 @@ struct CommonGraphParams
     std::string                      validation_file{};
     std::string                      validation_path{};
     std::string                      tuner_file{};
-    std::string                      mlgo_file{};
     unsigned int                     validation_range_start{ 0 };
     unsigned int                     validation_range_end{ std::numeric_limits<unsigned int>::max() };
 };
@@ -152,7 +151,6 @@ public:
 
     ToggleOption                           *help;             /**< Show help option */
     SimpleOption<int>                      *threads;          /**< Number of threads option */
-    SimpleOption<int>                      *batches;          /**< Number of batches */
     EnumOption<arm_compute::graph::Target> *target;           /**< Graph execution target */
     EnumOption<arm_compute::DataType>      *data_type;        /**< Graph data type */
     EnumOption<arm_compute::DataLayout>    *data_layout;      /**< Graph data layout */
@@ -167,7 +165,6 @@ public:
     SimpleOption<std::string>              *validation_path;  /**< Validation data path */
     SimpleOption<std::string>              *validation_range; /**< Validation range */
     SimpleOption<std::string>              *tuner_file;       /**< File to load/store the tuner's values from */
-    SimpleOption<std::string>              *mlgo_file;        /**< File to load the MLGO heuristics from */
 };
 
 /** Consumes the common graph options and creates a structure containing any information

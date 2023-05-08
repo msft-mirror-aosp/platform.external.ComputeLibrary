@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,6 +26,7 @@
 
 #include "arm_compute/core/IArray.h"
 #include "arm_compute/core/Types.h"
+#include "support/MemorySupport.h"
 
 #include <memory>
 
@@ -46,7 +47,7 @@ public:
      * @param[in] max_num_values Maximum number of values the array will be able to stored
      */
     Array(size_t max_num_values)
-        : IArray<T>(max_num_values), _values(std::make_unique<T[]>(max_num_values))
+        : IArray<T>(max_num_values), _values(arm_compute::support::cpp14::make_unique<T[]>(max_num_values))
     {
     }
 
@@ -60,6 +61,14 @@ private:
     std::unique_ptr<T[]> _values;
 };
 
+/** Array of Key Points. */
+using KeyPointArray = Array<KeyPoint>;
+/** Array of 2D Coordinates. */
+using Coordinates2DArray = Array<Coordinates2D>;
+/** Array of Detection Windows. */
+using DetectionWindowArray = Array<DetectionWindow>;
+/** Array of 2D Sizes. */
+using Size2DArray = Array<Size2D>;
 /** Array of uint8s. */
 using UInt8Array = Array<uint8_t>;
 /** Array of uint16s. */

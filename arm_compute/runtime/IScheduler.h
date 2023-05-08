@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,7 +35,6 @@ namespace arm_compute
 {
 class ICPPKernel;
 class ITensor;
-class Window;
 
 /** Scheduler interface to run kernels */
 class IScheduler
@@ -127,9 +126,9 @@ public:
         }
 
     private:
-        unsigned int _split_dimension{};
-        StrategyHint _strategy{};
-        int          _threshold{};
+        unsigned int _split_dimension;
+        StrategyHint _strategy;
+        int          _threshold;
     };
     /** Signature for the workloads to execute */
     using Workload = std::function<void(const ThreadInfo &)>;
@@ -152,7 +151,7 @@ public:
      */
     virtual void set_num_threads_with_affinity(unsigned int num_threads, BindFunc func);
 
-    /** Returns the number of threads that the SingleThreadScheduler has in its pool.
+    /** Returns the number of threads that the SingleThreadScheduler has in his pool.
      *
      * @return Number of threads available in SingleThreadScheduler.
      */
@@ -169,10 +168,9 @@ public:
      *
      * @param[in] kernel  Kernel to execute.
      * @param[in] hints   Hints for the scheduler.
-     * @param[in] window  Window to use for kernel execution.
      * @param[in] tensors Vector containing the tensors to operate on.
      */
-    virtual void schedule_op(ICPPKernel *kernel, const Hints &hints, const Window &window, ITensorPack &tensors) = 0;
+    virtual void schedule_op(ICPPKernel *kernel, const Hints &hints, ITensorPack &tensors) = 0;
 
     /** Execute all the passed workloads
      *
@@ -205,28 +203,9 @@ protected:
      * @param[in] workloads Array of workloads to run
      */
     virtual void run_workloads(std::vector<Workload> &workloads) = 0;
+    CPUInfo _cpu_info;
 
-    /** Common scheduler logic to execute the given kernel
-     *
-     * @param[in] kernel  Kernel to execute.
-     * @param[in] hints   Hints for the scheduler.
-     * @param[in] window  Window to use for kernel execution.
-     * @param[in] tensors Vector containing the tensors to operate on.
-     */
-    void schedule_common(ICPPKernel *kernel, const Hints &hints, const Window &window, ITensorPack &tensors);
-
-    /** Adjust the number of windows to the optimize performance
-     * (used for small workloads where smaller number of threads might improve the performance)
-     *
-     * @param[in] window           Window to use for kernel execution
-     * @param[in] split_dimension  Axis of dimension to split
-     * @param[in] init_num_windows Initial number of sub-windows to split
-     * @param[in] kernel           Kernel to execute
-     * @param[in] cpu_info         The CPU platform used to create the context.
-     *
-     * @return Adjusted number of windows
-     */
-    std::size_t adjust_num_of_windows(const Window &window, std::size_t split_dimension, std::size_t init_num_windows, const ICPPKernel &kernel, const CPUInfo &cpu_info);
+    void schedule_common(ICPPKernel *kernel, const Hints &hints, ITensorPack &tensors);
 
 private:
     unsigned int _num_threads_hint = {};

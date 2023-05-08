@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020, 2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -70,7 +70,6 @@ AbsoluteTolerance<float> tolerance(ActivationLayerInfo::ActivationFunction activ
         case ActivationLayerInfo::ActivationFunction::SOFT_RELU:
         case ActivationLayerInfo::ActivationFunction::ELU:
         case ActivationLayerInfo::ActivationFunction::SQRT:
-        case ActivationLayerInfo::ActivationFunction::GELU:
             return AbsoluteTolerance<float>(data_type == DataType::F16 ? 0.01f : 0.00001f);
         case ActivationLayerInfo::ActivationFunction::TANH:
             return AbsoluteTolerance<float>(data_type == DataType::F16 ? 0.001f : 0.00001f);
@@ -169,10 +168,8 @@ template <typename T>
 using CLActivationLayerQuantizedFixture = ActivationValidationQuantizedFixture<CLTensor, CLAccessor, CLActivationLayer, T>;
 
 const auto QuantizedActivationDataset8 = combine(combine(framework::dataset::make("InPlace", { false }),
-                                                         concat(datasets::ActivationFunctionsQuantized(),
-                                                                framework::dataset::make("ActivationFunction",
-{ ActivationLayerInfo::ActivationFunction::HARD_SWISH, ActivationLayerInfo::ActivationFunction::LEAKY_RELU }))),
-framework::dataset::make("AlphaBeta", { 0.5f, 1.f }));
+                                                         concat(datasets::ActivationFunctionsQuantized(), framework::dataset::make("ActivationFunction", ActivationLayerInfo::ActivationFunction::HARD_SWISH))),
+                                                 framework::dataset::make("AlphaBeta", { 0.5f, 1.f }));
 
 const auto QuantizedActivationDataset16 = combine(combine(framework::dataset::make("InPlace", { false }),
                                                           datasets::ActivationFunctionsQuantized()),

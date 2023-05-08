@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,27 +24,19 @@
 #include "arm_compute/runtime/CL/functions/CLROIPoolingLayer.h"
 #include "arm_compute/core/CL/ICLArray.h"
 #include "src/core/CL/kernels/CLROIPoolingLayerKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 using namespace arm_compute;
-
-Status CLROIPoolingLayer::validate(const ITensorInfo *input, const ITensorInfo *rois, ITensorInfo *output, const ROIPoolingLayerInfo &pool_info)
-{
-    return CLROIPoolingLayerKernel::validate(input, rois, output, pool_info);
-}
 
 void CLROIPoolingLayer::configure(const ICLTensor *input, const ICLTensor *rois, ICLTensor *output, const ROIPoolingLayerInfo &pool_info)
 {
     configure(CLKernelLibrary::get().get_compile_context(), input, rois, output, pool_info);
 }
 
-void CLROIPoolingLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, const ICLTensor *rois, const ICLTensor *output, const ROIPoolingLayerInfo &pool_info)
+void CLROIPoolingLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, const ICLTensor *rois, ICLTensor *output, const ROIPoolingLayerInfo &pool_info)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, rois, output, pool_info);
-
     // Configure ROI pooling kernel
-    auto k = std::make_unique<CLROIPoolingLayerKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<CLROIPoolingLayerKernel>();
     k->configure(compile_context, input, rois, output, pool_info);
     _kernel = std::move(k);
 }

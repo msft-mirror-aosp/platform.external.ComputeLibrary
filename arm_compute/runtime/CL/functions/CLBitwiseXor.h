@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,7 +31,7 @@ namespace arm_compute
 class CLCompileContext;
 class ICLTensor;
 
-/** Basic function to perform bitwise XOR by running @ref CLBitwiseKernel.
+/** Basic function to run @ref CLBitwiseXorKernel.
  *
  * @note The tensor data type for the inputs must be U8.
  * @note The function performs a bitwise XOR operation using the two input tensors.
@@ -40,14 +40,6 @@ class CLBitwiseXor : public ICLSimpleFunction
 {
 public:
     /** Initialize the function
-     *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |U8             |U8             |
      *
      * @param[in]  input1 Input tensor. Data types supported: U8.
      * @param[in]  input2 Input tensor. Data types supported: U8.
