@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,16 +31,38 @@
 #include "arm_compute/core/IKernel.h"
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/core/experimental/Types.h"
+#include "arm_compute/runtime/CL/CLTuningParams.h"
+
+#include "src/core/CL/DefaultLWSHeuristics.h"
 
 #include <string>
 
 namespace arm_compute
 {
+namespace
+{
+bool is_same_lws(cl::NDRange lws0, cl::NDRange lws1)
+{
+    if(lws0.dimensions() != lws1.dimensions())
+    {
+        return false;
+    }
+
+    for(size_t i = 0; i < lws0.dimensions(); ++i)
+    {
+        if(lws0.get()[i] != lws1.get()[i])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+} // namespace
 template <typename T>
 class ICLArray;
 class ICLTensor;
 class Window;
-
 /** Common interface for all the OpenCL kernels */
 class ICLKernel : public IKernel
 {
@@ -63,23 +85,46 @@ private:
     {
         return 2 + 2 * dimension_size;
     }
+
+    cl::NDRange default_lws_tune(const Window &window)
+    {
+        return get_default_lws_for_type(_type, gws_from_window(window));
+    }
+
     using IKernel::configure; //Prevent children from calling IKernel::configure() directly
 protected:
     /** Configure the kernel's window and local workgroup size hint.
      *
-     * @param[in] window   The maximum window which will be returned by window()
-     * @param[in] lws_hint (Optional) Local-Workgroup-Size to use.
+     * @param[in] window    The maximum window which will be returned by window()
+     * @param[in] lws_hint  Local-Workgroup-Size to use.
+     * @param[in] wbsm_hint (Optional) Workgroup-Batch-Size-Modifier to use.
      */
-    void configure_internal(const Window &window, cl::NDRange lws_hint = CLKernelLibrary::get().default_ndrange())
+    void configure_internal(const Window &window, cl::NDRange lws_hint, cl_int wbsm_hint = 0)
     {
-        _lws_hint = lws_hint;
+        configure_internal(window, CLTuningParams(lws_hint, wbsm_hint));
+    }
+
+    /** Configure the kernel's window and tuning parameters hints.
+     *
+     * @param[in] window             The maximum window which will be returned by window()
+     * @param[in] tuning_params_hint (Optional) Tuning parameters to use.
+     */
+    void configure_internal(const Window &window, CLTuningParams tuning_params_hint = CLTuningParams(CLKernelLibrary::get().default_ndrange(), 0))
+    {
+        _tuning_params_hint = tuning_params_hint;
+
+        if(is_same_lws(_tuning_params_hint.get_lws(), CLKernelLibrary::get().default_ndrange()))
+        {
+            _tuning_params_hint.set_lws(default_lws_tune(window));
+        }
+
         IKernel::configure(window);
     }
 
 public:
     /** Constructor */
     ICLKernel()
-        : _kernel(nullptr), _target(GPUTarget::MIDGARD), _config_id(arm_compute::default_config_id), _max_workgroup_size(0), _lws_hint()
+        : _kernel(nullptr), _target(GPUTarget::MIDGARD), _config_id(arm_compute::default_config_id), _max_workgroup_size(0), _type(CLKernelType::UNKNOWN), _tuning_params_hint()
     {
     }
     /** Returns a reference to the OpenCL kernel of this object.
@@ -89,6 +134,14 @@ public:
     cl::Kernel &kernel()
     {
         return _kernel;
+    }
+    /** Returns the CL kernel type
+     *
+     * @return The CL kernel type
+     */
+    CLKernelType type() const
+    {
+        return _type;
     }
     /** Add the passed 1D array's parameters to the object's kernel's arguments starting from the index idx.
      *
@@ -171,6 +224,51 @@ public:
     {
         add_tensor_argument<4>(idx, tensor, window);
     }
+    /** Add the passed 5D tensor's parameters to the object's kernel's arguments starting from the index idx.
+     *
+     * @param[in,out] idx    Index at which to start adding the tensor's arguments. Will be incremented by the number of kernel arguments set.
+     * @param[in]     tensor Tensor to set as an argument of the object's kernel.
+     * @param[in]     window Window the kernel will be executed on.
+     */
+    void add_5D_tensor_argument(unsigned int &idx, const ICLTensor *tensor, const Window &window)
+    {
+        add_tensor_argument<5>(idx, tensor, window);
+    }
+
+    /** Add the passed NHW 3D tensor's parameters to the object's kernel's arguments by passing strides, dimensions and the offset to the first valid element in bytes.
+     *
+     * @param[in,out] idx    Index at which to start adding the tensor's arguments. Will be incremented by the number of kernel arguments set.
+     * @param[in]     tensor Tensor to set as an argument of the object's kernel.
+     */
+    void add_3d_tensor_nhw_argument(unsigned int &idx, const ICLTensor *tensor);
+
+    /** Returns the number of arguments enqueued per NHW 3D Tensor object.
+     *
+     * @return The number of arguments enqueued per NHW 3D Tensor object.
+     */
+    constexpr static unsigned int num_arguments_per_3d_tensor_nhw()
+    {
+        constexpr unsigned int no_args_per_3d_tensor_nhw = 7u;
+        return no_args_per_3d_tensor_nhw;
+    }
+
+    /** Add the passed NHWC 4D tensor's parameters to the object's kernel's arguments by passing strides, dimensions and the offset to the first valid element in bytes.
+     *
+     * @param[in,out] idx    Index at which to start adding the tensor's arguments. Will be incremented by the number of kernel arguments set.
+     * @param[in]     tensor Tensor to set as an argument of the object's kernel.
+     */
+    void add_4d_tensor_nhwc_argument(unsigned int &idx, const ICLTensor *tensor);
+
+    /** Returns the number of arguments enqueued per NHWC 4D Tensor object.
+     *
+     * @return The number of arguments enqueued per NHWC 4D Tensor object.
+     */
+    constexpr static unsigned int num_arguments_per_4d_tensor_nhwc()
+    {
+        constexpr unsigned int no_args_per_4d_tensor_nhwc = 9u;
+        return no_args_per_4d_tensor_nhwc;
+    }
+
     /** Returns the number of arguments enqueued per 1D array object.
      *
      * @return The number of arguments enqueues per 1D array object.
@@ -254,7 +352,7 @@ public:
     void set_lws_hint(const cl::NDRange &lws_hint)
     {
         ARM_COMPUTE_ERROR_ON_UNCONFIGURED_KERNEL(this); // lws_hint will be overwritten by configure()
-        _lws_hint = lws_hint;
+        _tuning_params_hint.set_lws(lws_hint);
     }
 
     /** Return the Local-Workgroup-Size hint
@@ -263,7 +361,28 @@ public:
      */
     cl::NDRange lws_hint() const
     {
-        return _lws_hint;
+        return _tuning_params_hint.get_lws();
+    }
+
+    /** Set the workgroup batch size modifier hint
+     *
+     * @note This method should be called after the configuration of the kernel
+     *
+     * @param[in] wbsm_hint workgroup batch size modifier value
+     */
+    void set_wbsm_hint(const cl_int &wbsm_hint)
+    {
+        ARM_COMPUTE_ERROR_ON_UNCONFIGURED_KERNEL(this); // wbsm_hint will be overwritten by configure()
+        _tuning_params_hint.set_wbsm(wbsm_hint);
+    }
+
+    /** Return the workgroup batch size modifier hint
+     *
+     * @return Current wbsm hint
+     */
+    cl_int wbsm_hint() const
+    {
+        return _tuning_params_hint.get_wbsm();
     }
 
     /** Get the configuration ID
@@ -339,12 +458,13 @@ private:
     void add_tensor_argument(unsigned int &idx, const ICLTensor *tensor, const Window &window);
 
 protected:
-    cl::Kernel  _kernel;             /**< OpenCL kernel to run */
-    GPUTarget   _target;             /**< The targeted GPU */
-    std::string _config_id;          /**< Configuration ID */
-    size_t      _max_workgroup_size; /**< The maximum workgroup size for this kernel */
+    cl::Kernel   _kernel;             /**< OpenCL kernel to run */
+    GPUTarget    _target;             /**< The targeted GPU */
+    std::string  _config_id;          /**< Configuration ID */
+    size_t       _max_workgroup_size; /**< The maximum workgroup size for this kernel */
+    CLKernelType _type;               /**< The CL kernel type */
 private:
-    cl::NDRange _lws_hint; /**< Local workgroup size hint for the OpenCL kernel */
+    CLTuningParams _tuning_params_hint; /**< Tuning parameters hint for the OpenCL kernel */
 };
 
 /** Add the kernel to the command queue with the given window.

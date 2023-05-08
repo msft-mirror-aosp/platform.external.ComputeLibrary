@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,11 +24,11 @@
 #ifndef ARM_COMPUTE_CLRUNTIME_CONTEXT_H
 #define ARM_COMPUTE_CLRUNTIME_CONTEXT_H
 
-#include "arm_compute/core/CL/CLCoreRuntimeContext.h"
 #include "arm_compute/core/CL/CLKernelLibrary.h"
 #include "arm_compute/core/CL/OpenCL.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "arm_compute/runtime/CL/CLTuner.h"
+#include "arm_compute/runtime/CL/CLTypes.h"
 #include "arm_compute/runtime/IScheduler.h"
 #include "arm_compute/runtime/RuntimeContext.h"
 
@@ -50,16 +50,15 @@ public:
     void set_gpu_scheduler(CLScheduler *scheduler);
 
     // Inherited overridden methods
-    CLScheduler          *gpu_scheduler();
-    CLKernelLibrary      &kernel_library();
-    CLCoreRuntimeContext *core_runtime_context();
+    CLScheduler     *gpu_scheduler();
+    CLKernelLibrary &kernel_library();
 
 private:
     std::unique_ptr<CLScheduler> _gpu_owned_scheduler{ nullptr };
     CLScheduler                 *_gpu_scheduler{ nullptr };
     CLTuner                      _tuner{ false };
     CLSymbols                    _symbols{};
-    CLCoreRuntimeContext         _core_context{};
+    CLBackendType                _backend_type{ CLBackendType::Native };
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_CLRUNTIME_CONTEXT_H */

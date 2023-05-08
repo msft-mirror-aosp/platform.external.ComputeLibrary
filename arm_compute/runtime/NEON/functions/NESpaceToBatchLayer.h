@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -34,11 +34,11 @@ namespace arm_compute
 class ITensor;
 class ITensorInfo;
 class NESpaceToBatchLayerKernel;
-class NEMemsetKernel;
+class NEFill;
 
-/** Basic function to spatial divide a tensor. This function calls the following NEON kernels/functions:
+/** Basic function to spatial divide a tensor. This function calls the following kernels/functions:
  *
- *  -# @ref NEMemsetKernel
+ *  -# @ref NEFill
  *  -# @ref NESpaceToBatchLayerKernel
  */
 class NESpaceToBatchLayer : public IFunction
@@ -57,6 +57,15 @@ public:
     /** Default destructor */
     ~NESpaceToBatchLayer();
     /** Set the input and output tensors.
+     *
+     * Valid data layouts:
+     * - NHWC
+     * - NCHW
+     *
+     * Valid data type configurations:
+     * |src0      |src1      |src2      |dst       |
+     * |:---------|:---------|:---------|:---------|
+     * |All       |S32       |S32       |All       |
      *
      * @param[in]  input       Tensor input. Supported tensor rank: 4. Data types supported: All.
      * @param[in]  block_shape 1-D tensor with shape [M]. Supported M: 2. Data types supported: S32
@@ -102,7 +111,7 @@ public:
 
 private:
     std::unique_ptr<NESpaceToBatchLayerKernel> _space_to_batch_kernel; /**< SpaceToBatch kernel to run */
-    std::unique_ptr<NEMemsetKernel>            _memset_kernel;         /**< Memset kernel to run */
+    std::unique_ptr<NEFill>                    _fill_f;                /**< Fill function to run */
     bool                                       _has_padding;           /**< Flag to check if the output has padding */
 };
 } // namespace arm_compute
