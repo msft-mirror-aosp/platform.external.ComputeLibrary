@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -85,7 +85,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NELogicalNotFixture<uint8_t>, framework::Datase
     validate(Accessor(_target), _reference);
 }
 TEST_SUITE_END() // LogicalNot
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

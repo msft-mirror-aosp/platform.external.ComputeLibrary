@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,7 +26,6 @@
 
 #include "arm_compute/core/Types.h"
 #include "arm_compute/runtime/CL/CLTensor.h"
-#include "arm_compute/runtime/CL/functions/CLFill.h"
 #include "arm_compute/runtime/IFunction.h"
 
 #include <memory>
@@ -34,13 +33,14 @@
 namespace arm_compute
 {
 class CLCompileContext;
+class CLMemsetKernel;
 class CLSpaceToBatchLayerKernel;
 class ICLTensor;
 class ITensorInfo;
 
 /** Basic function to spatial divide a tensor. This function calls the following OpenCL kernels/functions:
  *
- *  -# @ref CLFill
+ *  -# @ref CLMemsetKernel
  *  -# @ref CLSpaceToBatchLayerKernel
  */
 class CLSpaceToBatchLayer : public IFunction
@@ -59,15 +59,6 @@ public:
     /** Default destructor */
     ~CLSpaceToBatchLayer();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0      |src1      |src2      |dst       |
-     * |:---------|:---------|:---------|:---------|
-     * |All       |S32       |S32       |All       |
      *
      * @param[in]  input       Tensor input. Supported tensor rank: 4. Data types supported: All.
      * @param[in]  block_shape 1-D tensor with shape [M]. Supported M: 2. Data types supported: S32
@@ -134,7 +125,7 @@ public:
 
 private:
     std::unique_ptr<CLSpaceToBatchLayerKernel> _space_to_batch_kernel; /**< SpaceToBatch kernel to run */
-    CLFill                                     _fill;                  /**< Fill function to run */
+    std::unique_ptr<CLMemsetKernel>            _memset_kernel;         /**< Memset kernel to run */
     bool                                       _has_padding;           /**< Flag to check if the output has padding */
 };
 } // namespace arm_compute

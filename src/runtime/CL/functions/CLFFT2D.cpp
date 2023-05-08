@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,8 +30,6 @@
 #include "src/core/CL/kernels/CLFFTRadixStageKernel.h"
 #include "src/core/CL/kernels/CLFFTScaleKernel.h"
 
-#include "src/common/utils/Log.h"
-
 namespace arm_compute
 {
 CLFFT2D::CLFFT2D(std::shared_ptr<IMemoryManager> memory_manager)
@@ -50,7 +48,6 @@ void CLFFT2D::configure(const CLCompileContext &compile_context, const ICLTensor
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
     ARM_COMPUTE_ERROR_THROW_ON(CLFFT2D::validate(input->info(), output->info(), config));
-    ARM_COMPUTE_LOG_PARAMS(input, output, config);
 
     // Setup first pass
     FFT1DInfo first_pass_config;
@@ -70,7 +67,6 @@ void CLFFT2D::configure(const CLCompileContext &compile_context, const ICLTensor
 Status CLFFT2D::validate(const ITensorInfo *input, const ITensorInfo *output, const FFT2DInfo &config)
 {
     ARM_COMPUTE_RETURN_ERROR_ON_NULLPTR(input, output);
-    ARM_COMPUTE_RETURN_ERROR_ON_DATA_TYPE_NOT_IN(input, DataType::F16, DataType::F32);
 
     // Create intermediate tensor info
     TensorInfo first_pass_tensor(input->clone()->set_is_resizable(true).reset_padding().set_num_channels(2));

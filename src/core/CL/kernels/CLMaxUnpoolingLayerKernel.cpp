@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,6 +31,7 @@
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/Utils.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
+#include "src/core/AccessWindowStatic.h"
 #include "src/core/CL/CLValidate.h"
 #include "src/core/helpers/AutoConfiguration.h"
 #include "src/core/helpers/WindowHelpers.h"
@@ -74,14 +75,12 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output, c
 CLMaxUnpoolingLayerKernel::CLMaxUnpoolingLayerKernel()
     : _input(nullptr), _output(nullptr), _indices(nullptr)
 {
-    _type = CLKernelType::POOL;
 }
 
 void CLMaxUnpoolingLayerKernel::configure(const CLCompileContext &compile_context, const ICLTensor *input, const ICLTensor *indices, ICLTensor *output, const PoolingLayerInfo &pool_info)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(input->info(), output->info(), pool_info, indices->info()));
-    auto padding_info = get_padding_info({ input, indices, output });
 
     _input   = input;
     _output  = output;
@@ -116,7 +115,6 @@ void CLMaxUnpoolingLayerKernel::configure(const CLCompileContext &compile_contex
     _config_id += support::cpp11::to_string(output->info()->dimension(2));
     _config_id += "_";
     _config_id += support::cpp11::to_string(output->info()->dimension(3));
-    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLMaxUnpoolingLayerKernel::validate(const ITensorInfo *input, const ITensorInfo *indices, const ITensorInfo *output, const PoolingLayerInfo &pool_info)

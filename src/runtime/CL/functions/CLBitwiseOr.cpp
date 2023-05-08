@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,14 +23,13 @@
  */
 #include "arm_compute/runtime/CL/functions/CLBitwiseOr.h"
 
-#include "src/core/CL/kernels/CLBitwiseKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "src/core/CL/kernels/CLBitwiseOrKernel.h"
+#include "support/MemorySupport.h"
 
 #include <utility>
 
-namespace arm_compute
-{
+using namespace arm_compute;
+
 void CLBitwiseOr::configure(const ICLTensor *input1, const ICLTensor *input2, ICLTensor *output)
 {
     configure(CLKernelLibrary::get().get_compile_context(), input1, input2, output);
@@ -38,9 +37,7 @@ void CLBitwiseOr::configure(const ICLTensor *input1, const ICLTensor *input2, IC
 
 void CLBitwiseOr::configure(const CLCompileContext &compile_context, const ICLTensor *input1, const ICLTensor *input2, ICLTensor *output)
 {
-    ARM_COMPUTE_LOG_PARAMS(input1, input2, output);
-    auto k = std::make_unique<CLBitwiseKernel>();
-    k->configure(compile_context, input1, input2, output, BitwiseOperation::OR);
+    auto k = arm_compute::support::cpp14::make_unique<CLBitwiseOrKernel>();
+    k->configure(compile_context, input1, input2, output);
     _kernel = std::move(k);
 }
-} // namespace arm_compute

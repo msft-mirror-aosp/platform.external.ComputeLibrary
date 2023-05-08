@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -54,7 +54,7 @@ const auto PoolingLayerDatasetFPSmall = combine(combine(combine(datasets::Poolin
 
 /** Input data sets for asymmetric data type */
 
-const auto PoolingLayerDatasetQASYMM8Small = combine(combine(combine(framework::dataset::make("PoolingType", { PoolingType::MAX, PoolingType::AVG }), framework::dataset::make("PoolingSize", { Size2D(2, 2), Size2D(3, 3), Size2D(3, 7), Size2D(7, 7) })),
+const auto PoolingLayerDatasetQASYMM8Small = combine(combine(combine(framework::dataset::make("PoolingType", { PoolingType::MAX, PoolingType::AVG }), framework::dataset::make("PoolingSize", { Size2D(2, 2), Size2D(3, 3), Size2D(3, 7) })),
                                                              framework::dataset::make("PadStride", { PadStrideInfo(1, 1, 0, 0), PadStrideInfo(1, 2, 1, 1) })),
                                                      framework::dataset::make("ExcludePadding", { true }));
 
@@ -66,29 +66,6 @@ constexpr AbsoluteTolerance<uint8_t> tolerance_qasymm8(1);   /**< Tolerance valu
 constexpr AbsoluteTolerance<int8_t>  tolerance_qasymm8_s(1); /**< Tolerance value for comparing reference's output against implementation's output for signed 8-bit asymmetric type */
 const auto                           pool_data_layout_dataset = framework::dataset::make("DataLayout", { DataLayout::NCHW, DataLayout::NHWC });
 
-const auto qasymm8_in_qinfo_dataset  = framework::dataset::make("InputQuantInfo", { QuantizationInfo(.2f, 10) });
-const auto qasymm8_out_qinfo_dataset = framework::dataset::make("OutputQuantInfo",
-{
-    QuantizationInfo(.2f, 10), // Same qinfo
-    QuantizationInfo(.1f, 5),  // Multiplier <= 1
-    QuantizationInfo(2.f, 3)   // Multiplier > 1
-});
-
-const auto qasymm8_signed_in_qinfo_dataset  = framework::dataset::make("InputQuantInfo", { QuantizationInfo(.2f, -10) });
-const auto qasymm8_signed_out_qinfo_dataset = framework::dataset::make("OutputQuantInfo",
-{
-    QuantizationInfo(.2f, -10), // Same qinfo
-    QuantizationInfo(.1f, -5),  // Multiplier <= 1
-    QuantizationInfo(2.f, -3)   // Multiplier > 1
-});
-
-// Cases where pooling region is completely outside the input tensor (excluding global pooling)
-const auto pool_outside_input_dataset = zip(zip(zip(zip(
-                                                        framework::dataset::make("Shape", { TensorShape{ 2U, 2U, 1U }, TensorShape{ 2U, 2U, 4U }, TensorShape{ 3U, 5U, 2U }, TensorShape{ 10U, 20U, 3U } }),
-                                                        framework::dataset::make("PoolingType", { PoolingType::MAX, PoolingType::AVG, PoolingType::L2, PoolingType::MAX })),
-                                                    framework::dataset::make("PoolingSize", { Size2D{ 2, 2 }, Size2D{ 3, 3 }, Size2D{ 2, 2 }, Size2D{ 3, 6 } })),
-                                                framework::dataset::make("PadStride", { PadStrideInfo{ 1, 1, 2, 2 }, PadStrideInfo{ 1, 1, 4, 4 }, PadStrideInfo{ 1, 1, 3, 3 }, PadStrideInfo{ 1, 1, 2, 5 } })),
-                                            framework::dataset::make("ExcludePadding", { false, false, false, false }));
 } // namespace
 
 TEST_SUITE(NEON)
@@ -105,7 +82,6 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
                                             TensorInfo(TensorShape(13U, 13U, 5U), 1, DataType::F32),     // Invalid output Global Pooling
                                             TensorInfo(TensorShape(13U, 13U, 5U), 1, DataType::QASYMM8), // Invalid exclude_padding = false with quantized type, no actual padding and NHWC
                                             TensorInfo(TensorShape(13U, 13U, 5U), 1, DataType::F32),
-                                            TensorInfo(TensorShape(1U, 16U, 1U),  1, DataType::F32),
                                           }),
     framework::dataset::make("OutputInfo",{ TensorInfo(TensorShape(25U, 11U, 2U), 1, DataType::F16),
                                             TensorInfo(TensorShape(25U, 10U, 2U), 1, DataType::F32),
@@ -115,7 +91,6 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
                                             TensorInfo(TensorShape(2U, 2U, 5U), 1, DataType::F32),
                                             TensorInfo(TensorShape(12U, 12U, 5U), 1, DataType::QASYMM8),
                                             TensorInfo(TensorShape(25U, 11U, 2U), 1, DataType::F32),
-                                            TensorInfo(TensorShape(1U, 15U, 1U), 1, DataType::F32),
                                           })),
     framework::dataset::make("PoolInfo",  { PoolingLayerInfo(PoolingType::AVG, 3, DataLayout::NCHW, PadStrideInfo(1, 1, 0, 0)),
                                             PoolingLayerInfo(PoolingType::AVG, 3, DataLayout::NCHW, PadStrideInfo(1, 1, 0, 0)),
@@ -125,9 +100,8 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
                                             PoolingLayerInfo(PoolingType::MAX, DataLayout::NCHW),
                                             PoolingLayerInfo(PoolingType::AVG, 2, DataLayout::NHWC, PadStrideInfo(), false),
                                             PoolingLayerInfo(PoolingType::AVG, DataLayout::NCHW),
-                                            PoolingLayerInfo(PoolingType::MAX, 2, DataLayout::NHWC, PadStrideInfo(1, 1, 0, 0), false),
                                            })),
-    framework::dataset::make("Expected", { false, false, false, false, true, false, true, false, false})),
+    framework::dataset::make("Expected", { false, false, false, false, true, false, false, false, true })),
     input_info, output_info, pool_info, expected)
 {
     bool is_valid = bool(NEPoolingLayer::validate(&input_info.clone()->set_is_resizable(false), &output_info.clone()->set_is_resizable(false), pool_info));
@@ -141,8 +115,6 @@ using NEPoolingLayerIndicesFixture = PoolingLayerIndicesValidationFixture<Tensor
 
 template <typename T>
 using NEPoolingLayerFixture = PoolingLayerValidationFixture<Tensor, Accessor, NEPoolingLayer, T>;
-template <typename T>
-using NEPoolingLayerMixedDataLayoutFixture = PoolingLayerValidationFixture<Tensor, Accessor, NEPoolingLayer, T, true>;
 
 template <typename T>
 using NESpecialPoolingLayerFixture = SpecialPoolingLayerValidationFixture<Tensor, Accessor, NEPoolingLayer, T>;
@@ -153,35 +125,27 @@ const auto PoolingLayerIndicesDatasetFPSmall = combine(combine(combine(framework
 
 TEST_SUITE(Float)
 TEST_SUITE(FP32)
-FIXTURE_DATA_TEST_CASE(RunIndices, NEPoolingLayerIndicesFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallNoneUnitShapes(), combine(PoolingLayerIndicesDatasetFPSmall,
+FIXTURE_DATA_TEST_CASE(RunIndices, NEPoolingLayerIndicesFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallShapes(), combine(PoolingLayerIndicesDatasetFPSmall,
                                                                                                                    framework::dataset::make("DataType",
                                                                                                                            DataType::F32))),
-                                                                                                                   framework::dataset::make("DataLayout", { DataLayout::NCHW, DataLayout::NHWC })))
+                                                                                                                   framework::dataset::make("DataLayout", { DataLayout::NCHW, DataLayout::NHWC })
+
+                                                                                                                  ))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
     validate(Accessor(_target_indices), _ref_indices);
 }
+
 FIXTURE_DATA_TEST_CASE(RunSpecial, NESpecialPoolingLayerFixture<float>, framework::DatasetMode::ALL, datasets::PoolingLayerDatasetSpecial() * framework::dataset::make("DataType", DataType::F32))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
 }
-FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallNoneUnitShapes(), combine(PoolingLayerDatasetFPSmall,
+FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallShapes(), combine(PoolingLayerDatasetFPSmall,
                                                                                                                   framework::dataset::make("DataType",
                                                                                                                           DataType::F32))),
                                                                                                           pool_data_layout_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_f32);
-}
-FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEPoolingLayerMixedDataLayoutFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallNoneUnitShapes(),
-                       combine(combine(combine(combine(datasets::PoolingTypes(),
-                                                       framework::dataset::make("PoolingSize", { Size2D(2, 2) })),
-                                               framework::dataset::make("PadStride", { PadStrideInfo(2, 1, 0, 0) })),
-                                       framework::dataset::make("ExcludePadding", { false })),
-                               framework::dataset::make("DataType", DataType::F32))),
-                       pool_data_layout_dataset))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
@@ -194,30 +158,11 @@ FIXTURE_DATA_TEST_CASE(RunLarge, NEPoolingLayerFixture<float>, framework::Datase
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f32);
 }
-TEST_SUITE(CornerCases)
-FIXTURE_DATA_TEST_CASE(PoolRegionCompletelyOutsideInput, NEPoolingLayerFixture<float>, framework::DatasetMode::PRECOMMIT, combine(combine(pool_outside_input_dataset,
-                       framework::dataset::make("DataType",
-                                                DataType::F32)),
-                       pool_data_layout_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_f32);
-}
-TEST_SUITE_END() // CornerCases
 TEST_SUITE_END() // FP32
 
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 TEST_SUITE(FP16)
-FIXTURE_DATA_TEST_CASE(RunIndices, NEPoolingLayerIndicesFixture<half>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallNoneUnitShapes(), combine(PoolingLayerIndicesDatasetFPSmall,
-                                                                                                                  framework::dataset::make("DataType",
-                                                                                                                          DataType::F16))),
-                                                                                                                  framework::dataset::make("DataLayout", { DataLayout::NCHW, DataLayout::NHWC })))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_f16);
-    validate(Accessor(_target_indices), _ref_indices);
-}
-FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerFixture<half>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallNoneUnitShapes(), combine(PoolingLayerDatasetFPSmall,
+FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerFixture<half>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallShapes(), combine(PoolingLayerDatasetFPSmall,
                                                                                                                  framework::dataset::make("DataType", DataType::F16))),
                                                                                                          pool_data_layout_dataset))
 {
@@ -231,16 +176,6 @@ FIXTURE_DATA_TEST_CASE(RunLarge, NEPoolingLayerFixture<half>, framework::Dataset
     // Validate output
     validate(Accessor(_target), _reference, tolerance_f16);
 }
-TEST_SUITE(CornerCases)
-FIXTURE_DATA_TEST_CASE(PoolRegionCompletelyOutsideInput, NEPoolingLayerFixture<half>, framework::DatasetMode::PRECOMMIT, combine(combine(pool_outside_input_dataset,
-                       framework::dataset::make("DataType",
-                                                DataType::F16)),
-                       pool_data_layout_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_f16);
-}
-TEST_SUITE_END() // CornerCases
 TEST_SUITE_END() // FP16
 #endif           /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
 TEST_SUITE_END() // Float
@@ -249,64 +184,20 @@ TEST_SUITE(Quantized)
 
 template <typename T>
 using NEPoolingLayerQuantizedFixture = PoolingLayerValidationQuantizedFixture<Tensor, Accessor, NEPoolingLayer, T>;
-template <typename T>
-using NEPoolingLayerQuantizedMixedDataLayoutFixture = PoolingLayerValidationQuantizedFixture<Tensor, Accessor, NEPoolingLayer, T, true>;
 
 TEST_SUITE(QASYMM8)
-FIXTURE_DATA_TEST_CASE(RunSmallNCHW, NEPoolingLayerQuantizedFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallNoneUnitShapes(),
-                       combine(PoolingLayerDatasetQASYMM8Small,
-                               framework::dataset::make("DataType", DataType::QASYMM8))),
-                       framework::dataset::make("DataLayout", { DataLayout::NCHW })),
-                       qasymm8_in_qinfo_dataset),
-                       qasymm8_in_qinfo_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8);
-}
-FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerQuantizedFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallNoneUnitShapes(),
-                                                                                                                     combine(PoolingLayerDatasetQASYMM8Small,
-                                                                                                                             framework::dataset::make("DataType", DataType::QASYMM8))),
-                                                                                                                     framework::dataset::make("DataLayout", { DataLayout::NHWC })),
-                                                                                                                     qasymm8_in_qinfo_dataset),
-                                                                                                                     qasymm8_out_qinfo_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8);
-}
-FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEPoolingLayerQuantizedMixedDataLayoutFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallNoneUnitShapes(),
-                       combine(combine(combine(combine(framework::dataset::make("PoolingType", { PoolingType::MAX, PoolingType::AVG }),
-                                                       framework::dataset::make("PoolingSize", { Size2D(2, 2) })),
-                                               framework::dataset::make("PadStride", { PadStrideInfo(1, 2, 1, 1) })),
-                                       framework::dataset::make("ExcludePadding", { true })),
-                               framework::dataset::make("DataType", DataType::QASYMM8))),
-                       framework::dataset::make("DataLayout", { DataLayout::NHWC, DataLayout::NCHW })),
-                       framework::dataset::make("InputQuantInfo", { QuantizationInfo(1.f / 255.f, 10) })),
-                       framework::dataset::make("OutputQuantInfo", { QuantizationInfo(1.f / 255.f, 5) })))
+FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerQuantizedFixture<uint8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallShapes(), combine(PoolingLayerDatasetQASYMM8Small,
+                                                                                                                     framework::dataset::make("DataType", DataType::QASYMM8))),
+                                                                                                                     pool_data_layout_dataset))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_qasymm8);
 }
 TEST_SUITE_END() // QASYMM8
 TEST_SUITE(QASYMM8_SIGNED)
-FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerQuantizedFixture<int8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallNoneUnitShapes(),
-                                                                                                                    combine(PoolingLayerDatasetQASYMM8Small,
-                                                                                                                            framework::dataset::make("DataType", DataType::QASYMM8_SIGNED))),
-                                                                                                                    framework::dataset::make("DataLayout", { DataLayout::NCHW, DataLayout::NHWC })),
-                                                                                                                    qasymm8_signed_in_qinfo_dataset),
-                                                                                                                    qasymm8_signed_in_qinfo_dataset))
-{
-    // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8_s);
-}
-FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEPoolingLayerQuantizedMixedDataLayoutFixture<int8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(combine(combine(datasets::SmallNoneUnitShapes(),
-                       combine(combine(combine(combine(framework::dataset::make("PoolingType", { PoolingType::MAX, PoolingType::AVG }),
-                                                       framework::dataset::make("PoolingSize", { Size2D(2, 2) })),
-                                               framework::dataset::make("PadStride", { PadStrideInfo(1, 2, 1, 1) })),
-                                       framework::dataset::make("ExcludePadding", { true })),
-                               framework::dataset::make("DataType", DataType::QASYMM8_SIGNED))),
-                       framework::dataset::make("DataLayout", { DataLayout::NHWC, DataLayout::NCHW })),
-                       framework::dataset::make("InputQuantInfo", { QuantizationInfo(1.f / 127.f, -10) })),
-                       framework::dataset::make("OutputQuantInfo", { QuantizationInfo(1.f / 127.f, -10) })))
+FIXTURE_DATA_TEST_CASE(RunSmall, NEPoolingLayerQuantizedFixture<int8_t>, framework::DatasetMode::PRECOMMIT, combine(combine(datasets::SmallShapes(), combine(PoolingLayerDatasetQASYMM8Small,
+                                                                                                                    framework::dataset::make("DataType", DataType::QASYMM8_SIGNED))),
+                                                                                                                    pool_data_layout_dataset))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_qasymm8_s);
@@ -314,7 +205,7 @@ FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEPoolingLayerQuantizedMixedDataLayou
 TEST_SUITE_END() // QASYMM8_SIGNED
 TEST_SUITE_END() // Quantized
 TEST_SUITE_END() // PoolingLayer
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -53,7 +53,6 @@ AbsoluteTolerance<float> absolute_tolerance_f16(0.001f);
 #endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 
 constexpr AbsoluteTolerance<uint8_t> tolerance_qasymm8(1);
-constexpr AbsoluteTolerance<int8_t> tolerance_qasymm8_s(1);
 } // namespace
 
 TEST_SUITE(NEON)
@@ -155,13 +154,13 @@ FIXTURE_DATA_TEST_CASE(Small, NEROIAlignLayerQuantizedFixture<int8_t>, framework
                                framework::dataset::make("OutputQuantizationInfo", { QuantizationInfo(2.f / 255.f, 120) })))
 {
     // Validate output
-    validate(Accessor(_target), _reference, tolerance_qasymm8_s);
+    validate(Accessor(_target), _reference, tolerance_qasymm8);
 }
 TEST_SUITE_END() // QASYMM8_SIGNED
 TEST_SUITE_END() // Quantized
 
 TEST_SUITE_END() // RoiAlign
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

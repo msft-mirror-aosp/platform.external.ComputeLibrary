@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,7 +59,7 @@ Target target_from_name(const std::string &name)
     {
         { "neon", Target::NEON },
         { "cl", Target::CL },
-        { "clvk", Target::CLVK },
+        { "gc", Target::GC },
     };
 
 #ifndef ARM_COMPUTE_EXCEPTIONS_DISABLED

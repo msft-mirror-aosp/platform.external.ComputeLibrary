@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -63,7 +63,6 @@ struct FrameworkConfig
     int                                            num_iterations{ 1 };         /**< Number of iterations per test. */
     float                                          cooldown_sec{ -1.f };        /**< Delay between tests in seconds. */
     LogLevel                                       log_level{ LogLevel::NONE }; /**< Verbosity of the output. */
-    bool                                           configure_only{ false };     /**< Only configure kernels */
 };
 
 /** Information about a test case.
@@ -230,13 +229,13 @@ public:
 
     /** Indicates if test execution is stopped after the first failed test.
      *
-     * @return True if the execution is going to be stopped after the first failed test.
+     * @return True if the execution is going to be aborted after the first failed test.
      */
     bool stop_on_error() const;
 
-    /** Set whether to stop execution after the first failed test.
+    /** Set whether to abort execution after the first failed test.
      *
-     * @param[in] stop_on_error True if execution is going to be stopped after first failed test.
+     * @param[in] stop_on_error True if execution is going to be aborted after first failed test.
      */
     void set_stop_on_error(bool stop_on_error);
 
@@ -307,21 +306,6 @@ public:
      * @param[in] instr_info Instruments info to set
      */
     void set_instruments_info(InstrumentsInfo instr_info);
-    /** Get the configure only flag
-     *
-     * @return The current configure only flag.
-     */
-    bool configure_only() const;
-    /** Return whether the new fixture has been called
-     *
-     * @return The current new fixture call flag.
-     */
-    bool new_fixture_call() const;
-    /** Set the new fixture call flag
-     *
-     * @param[in] val Value to set for the flag
-     */
-    void set_new_fixture_call(bool val);
 
 private:
     Framework();
@@ -356,8 +340,6 @@ private:
     bool                   _stop_on_error{ false };
     bool                   _error_on_missing_assets{ false };
     std::vector<Printer *> _printers{};
-    bool                   _configure_only{ false };
-    bool                   _new_fixture_call{ false };
 
     using create_function = std::unique_ptr<Instrument>();
     std::map<InstrumentsDescription, create_function *> _available_instruments{};
@@ -373,7 +355,7 @@ private:
 template <typename T>
 inline void Framework::add_test_case(std::string test_name, DatasetMode mode, TestCaseFactory::Status status)
 {
-    _test_factories.emplace_back(std::make_unique<SimpleTestCaseFactory<T>>(current_suite_name(), std::move(test_name), mode, status));
+    _test_factories.emplace_back(support::cpp14::make_unique<SimpleTestCaseFactory<T>>(current_suite_name(), std::move(test_name), mode, status));
 }
 
 template <typename T, typename D>

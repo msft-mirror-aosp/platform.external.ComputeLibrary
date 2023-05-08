@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,24 +24,41 @@
 #ifndef ARM_COMPUTE_NEGEMMLOWPMATRIXMULTIPLYCORE_H
 #define ARM_COMPUTE_NEGEMMLOWPMATRIXMULTIPLYCORE_H
 
-#include "arm_compute/core/Types.h"
+#include "NEActivationLayer.h"
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/IMemoryManager.h"
-#include "arm_compute/runtime/IWeightsManager.h"
+#include "arm_compute/runtime/MemoryGroup.h"
+#include "arm_compute/runtime/NEON/functions/NEGEMMAssemblyDispatch.h"
+#include "arm_compute/runtime/Tensor.h"
 
 #include <memory>
 
 namespace arm_compute
 {
 class ITensor;
-class ITensorInfo;
+class NEConvertQuantizedSignednessKernel;
+class NEConvertQuantizedSignednessKernel;
+class NEGEMMInterleave4x4Kernel;
+class NEGEMMLowpMatrixMultiplyKernel;
+class NEGEMMLowpOffsetContributionKernel;
+class NEGEMMLowpOffsetContributionOutputStageKernel;
+class NEGEMMLowpMatrixAReductionKernel;
+class NEGEMMLowpMatrixBReductionKernel;
+class NEGEMMTranspose1xWKernel;
 
-/** Function to run Gemm on quantized types.
+/** Basic function to execute GEMMLowpMatrixMultiplyCore on NEON. This function calls the following NEON kernels if the DOT product instruction is not available:
  *
- *  This function calls the following:
+ *  -# @ref NEGEMMInterleave4x4Kernel
+ *  -# @ref NEGEMMTranspose1xWKernel
+ *  -# @ref NEGEMMLowpMatrixMultiplyKernel
+ *  -# @ref NEGEMMLowpOffsetContributionKernel
+ *  -# @ref NEActivationLayer
  *
- * -# @ref cpu::CpuGemmLowpMatrixMultiplyCore
- */
+ * otherwise if the DOT product instruction is available:
+ *
+ *  -# @ref NEGEMMLowpOffsetContributionKernel
+ *
+*/
 class NEGEMMLowpMatrixMultiplyCore : public IFunction
 {
 public:
@@ -58,26 +75,6 @@ public:
     /** Default destructor */
     ~NEGEMMLowpMatrixMultiplyCore();
     /** Initialise the kernel's inputs, output
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0           |src1               |src2     |dst            |
-     * |:--------------|:------------------|:--------|:--------------|
-     * |QASYMM8        |QASYMM8            |S32      |QASYMM8        |
-     * |QASYMM8        |QSYMM8_PER_CHANNEL |S32      |QASYMM8        |
-     * |QASYMM8        |QSYMM8             |S32      |QASYMM8        |
-     * |QASYMM8        |QASYMM8            |S32      |S32            |
-     * |QASYMM8        |QSYMM8_PER_CHANNEL |S32      |S32            |
-     * |QASYMM8        |QSYMM8             |S32      |S32            |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED     |S32      |QASYMM8_SIGNED |
-     * |QASYMM8_SIGNED |QSYMM8_PER_CHANNEL |S32      |QASYMM8_SIGNED |
-     * |QASYMM8_SIGNED |QSYMM8             |S32      |QASYMM8_SIGNED |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED     |S32      |S32            |
-     * |QASYMM8_SIGNED |QSYMM8_PER_CHANNEL |S32      |S32            |
-     * |QASYMM8_SIGNED |QSYMM8             |S32      |S32            |
      *
      * @note GEMM_LOWP:  low precision GEMM kernel
      *  This kernel performs the following computations:
@@ -98,7 +95,14 @@ public:
     void configure(const ITensor *a, const ITensor *b, const ITensor *c, ITensor *output, const GEMMInfo &gemm_info = GEMMInfo());
     /** Static function to check if given info will lead to a valid configuration of @ref NEGEMMLowpMatrixMultiplyCore
      *
-     * Similar to @ref NEGEMMLowpMatrixMultiplyCore::configure()
+     * @note The @p output type is S32 if @p gemm_info.type == GEMMLowpOutputStageType::NONE. It is QASYMM8/QASYMM8_SIGNED otherwise
+     *
+     * @param[in] a         First input tensor info  (Matrix A). Data type supported: QASYMM8/QASYMM8_SIGNED.
+     * @param[in] b         Second input tensor info (Matrix B). Data type supported: QASYMM8/QASYMM8_SIGNED/QSYMM8/QSYMM8_PER_CHANNEL.
+     * @param[in] c         Third input tensor  info (Matrix C). It can be a nullptr. Data type supported: S32
+     * @param[in] output    Output tensor info. Data type supported: Data type supported: S32/QASYMM8/QASYMM8_SIGNED
+     * @param[in] gemm_info (Optional) Specifies if the matrix A and/or matrix B have been reshaped and
+     *                      if the reshape of matrix B should be executed only for the first run
      *
      * @return a status
      */
@@ -109,8 +113,39 @@ public:
     void prepare() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    MemoryGroup                                                    _memory_group;
+    IWeightsManager                                               *_weights_manager;
+    NEGEMMAssemblyDispatch                                         _asm_glue;
+    std::unique_ptr<NEGEMMLowpMatrixMultiplyKernel>                _mm_kernel;
+    std::unique_ptr<NEGEMMInterleave4x4Kernel>                     _mtx_a_reshape_kernel;
+    std::unique_ptr<NEGEMMTranspose1xWKernel>                      _mtx_b_reshape_kernel;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel>              _mtx_a_reduction_kernel;
+    std::unique_ptr<NEGEMMLowpMatrixBReductionKernel>              _mtx_b_reduction_kernel;
+    std::unique_ptr<NEGEMMLowpOffsetContributionKernel>            _offset_contribution_kernel;
+    std::unique_ptr<NEGEMMLowpOffsetContributionOutputStageKernel> _offset_contribution_output_stage_kernel;
+    NEActivationLayer                                              _activation_func;
+    std::unique_ptr<NEConvertQuantizedSignednessKernel>            _convert_to_signed_asymm;
+    std::unique_ptr<NEConvertQuantizedSignednessKernel>            _convert_from_signed_asymm;
+
+    Tensor         _vector_sum_col;
+    Tensor         _vector_sum_row;
+    Tensor         _tmp_a;
+    Tensor         _tmp_b;
+    Tensor         _mm_result_s32;
+    Tensor         _signed_a;
+    Tensor         _signed_output;
+    const ITensor *_original_b;
+    int32_t        _a_offset;
+    int32_t        _b_offset;
+
+    bool _run_vector_matrix_multiplication;
+    bool _assembly_path;
+    bool _fused_assembly_path;
+    bool _reshape_b_only_on_first_run;
+    bool _is_prepared;
+    bool _fuse_output_stage;
+    bool _run_activation;
+    bool _flip_signedness;
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_NEGEMMLOWPMATRIXMULTIPLYCORE_H */

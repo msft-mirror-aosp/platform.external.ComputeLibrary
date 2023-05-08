@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,9 +25,7 @@
 #define ARM_COMPUTE_NEFLATTENLAYER_H
 
 #include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/IFunction.h"
-
-#include <memory>
+#include "arm_compute/runtime/NEON/INESimpleFunctionNoBorder.h"
 
 namespace arm_compute
 {
@@ -35,29 +33,10 @@ class ITensor;
 class ITensorInfo;
 
 /** Basic function to execute flatten layer kernel. */
-class NEFlattenLayer : public IFunction
+class NEFlattenLayer : public INESimpleFunctionNoBorder
 {
 public:
-    NEFlattenLayer();
-    /** Destructor */
-    ~NEFlattenLayer();
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    NEFlattenLayer(const NEFlattenLayer &) = delete;
-    /** Default move constructor */
-    NEFlattenLayer(NEFlattenLayer &&);
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    NEFlattenLayer &operator=(const NEFlattenLayer &) = delete;
-    /** Default move assignment operator */
-    NEFlattenLayer &operator=(NEFlattenLayer &&);
     /** Initialise the kernel's input and output.
-     *
-     *  Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @param[in]  input  First input tensor to flatten with at least 3 dimensions. The dimensions over the third will be interpreted as batches. Data types supported: All
      * @param[out] output Output tensor with shape [w*h*d, input_batches] where:
@@ -75,13 +54,6 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output);
-
-    // Inherited methods overridden:
-    void run() override;
-
-private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 

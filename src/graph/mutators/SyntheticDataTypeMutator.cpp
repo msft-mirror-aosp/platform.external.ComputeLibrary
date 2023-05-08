@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -120,28 +120,15 @@ void remove_optimized_nodes(Graph &g)
  *
  * @param[in,out] g Graph to convert tensors of.
  */
-void convert_tensors(Graph &g, DataType data_type)
+void convert_tensors(Graph &g)
 {
     auto &tensors = g.tensors();
     for(auto &tensor : tensors)
     {
         if(tensor != nullptr)
         {
-            switch(data_type)
-            {
-                case DataType::QASYMM8:
-                case DataType::QASYMM8_SIGNED:
-                {
-                    tensor->desc().quant_info = QuantizationInfo(0.125f, -10);
-                    break;
-                }
-                default:
-                {
-                    ARM_COMPUTE_ERROR("Unsupported mutation type");
-                    break;
-                }
-            }
-            tensor->desc().data_type = data_type;
+            tensor->desc().data_type  = DataType::QASYMM8;
+            tensor->desc().quant_info = QuantizationInfo(0.125f, -10);
         }
     }
 }
@@ -177,41 +164,20 @@ void convert_special_tensors(Graph &g)
     auto softmax_func = [](INode * node, Tensor * tensor)
     {
         ARM_COMPUTE_UNUSED(node);
-        if(tensor->desc().data_type == DataType::QASYMM8)
-        {
-            tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, 0);
-        }
-        else if(tensor->desc().data_type == DataType::QASYMM8_SIGNED)
-        {
-            tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, -128);
-        }
+        tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, 0);
         return true;
     };
 
     auto act_func = [](INode * node, Tensor * tensor)
     {
         auto *act_node = arm_compute::utils::cast::polymorphic_downcast<ActivationLayerNode *>(node);
-        if(tensor->desc().data_type == DataType::QASYMM8)
+        if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::TANH)
         {
-            if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::TANH)
-            {
-                tensor->desc().quant_info = QuantizationInfo(1.f / 128.f, 128);
-            }
-            else if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::LOGISTIC)
-            {
-                tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, 0);
-            }
+            tensor->desc().quant_info = QuantizationInfo(1.f / 128.f, 128);
         }
-        else if(tensor->desc().data_type == DataType::QASYMM8_SIGNED)
+        else if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::LOGISTIC)
         {
-            if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::TANH)
-            {
-                tensor->desc().quant_info = QuantizationInfo(1.f / 128.f, 0);
-            }
-            else if(act_node->activation_info().activation() == ActivationLayerInfo::ActivationFunction::LOGISTIC)
-            {
-                tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, -128);
-            }
+            tensor->desc().quant_info = QuantizationInfo(1.f / 256.f, 0);
         }
         return true;
     };
@@ -256,7 +222,7 @@ void handle_nodes_with_bias(Graph &g)
                     auto             depth  = b_desc.shape[get_dimension_idx(b_desc.layout, DataLayoutDimension::BATCHES)];
                     b_desc.shape            = TensorShape(depth);
 
-                    auto accessor = std::make_unique<EmptyAccessor>();
+                    auto accessor = support::cpp14::make_unique<EmptyAccessor>();
                     auto b_nid    = GraphBuilder::add_const_node(g, params, b_desc, std::move(accessor));
                     g.add_connection(b_nid, 0, node_id, 2);
                 }
@@ -265,11 +231,6 @@ void handle_nodes_with_bias(Graph &g)
     }
 }
 } // namespace
-
-SyntheticDataTypeMutator::SyntheticDataTypeMutator(DataType mutate_type)
-    : _mutate_type{ mutate_type }
-{
-}
 
 const char *SyntheticDataTypeMutator::name()
 {
@@ -289,7 +250,7 @@ void SyntheticDataTypeMutator::mutate(Graph &g)
         remove_optimized_nodes(g);
 
         // Convert tensor
-        convert_tensors(g, _mutate_type);
+        convert_tensors(g);
         convert_special_tensors(g);
 
         // Handle special nodes

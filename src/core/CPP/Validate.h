@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,7 +24,6 @@
 #ifndef ARM_COMPUTE_CPP_VALIDATE_H
 #define ARM_COMPUTE_CPP_VALIDATE_H
 
-#include "arm_compute/core/CPP/CPPTypes.h"
 #include "arm_compute/core/Validate.h"
 
 namespace arm_compute
@@ -41,15 +40,12 @@ namespace arm_compute
 inline Status error_on_unsupported_cpu_fp16(const char *function, const char *file, const int line,
                                             const ITensorInfo *tensor_info)
 {
-    bool fp16_kernels_enabled = false;
-#if defined(ARM_COMPUTE_ENABLE_FP16) && defined(ENABLE_FP16_KERNELS)
-    fp16_kernels_enabled = true;
-#endif /* defined(ARM_COMPUTE_ENABLE_FP16) && defined(ENABLE_FP16_KERNELS) */
-
     ARM_COMPUTE_RETURN_ERROR_ON_LOC(tensor_info == nullptr, function, file, line);
-    ARM_COMPUTE_RETURN_ERROR_ON_LOC_MSG((tensor_info->data_type() == DataType::F16) && (!CPUInfo::get().has_fp16() || !fp16_kernels_enabled),
+#ifndef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+    ARM_COMPUTE_RETURN_ERROR_ON_LOC_MSG(tensor_info->data_type() == DataType::F16,
                                         function, file, line, "This CPU architecture does not support F16 data type, you need v8.2 or above");
-    return Status{};
+#endif /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
+    return Status {};
 }
 
 /** Return an error if the data type of the passed tensor info is BFLOAT16 and BFLOAT16 support is not compiled in.
@@ -64,15 +60,12 @@ inline Status error_on_unsupported_cpu_fp16(const char *function, const char *fi
 inline Status error_on_unsupported_cpu_bf16(const char *function, const char *file, const int line,
                                             const ITensorInfo *tensor_info)
 {
-    bool bf16_kernels_enabled = false;
-#if defined(ARM_COMPUTE_ENABLE_BF16)
-    bf16_kernels_enabled = true;
-#endif /* defined(ARM_COMPUTE_ENABLE_BF16) */
-
     ARM_COMPUTE_RETURN_ERROR_ON_LOC(tensor_info == nullptr, function, file, line);
-    ARM_COMPUTE_RETURN_ERROR_ON_LOC_MSG((tensor_info->data_type() == DataType::BFLOAT16) && (!CPUInfo::get().has_bf16() || !bf16_kernels_enabled),
+#if !(defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16))
+    ARM_COMPUTE_RETURN_ERROR_ON_LOC_MSG(tensor_info->data_type() == DataType::BFLOAT16,
                                         function, file, line, "This CPU architecture does not support BFloat16 data type, you need v8.6 or above");
-    return Status{};
+#endif /* !(defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16)) */
+    return Status {};
 }
 
 /** Return an error if the data type of the passed tensor is FP16 and FP16 support is not compiled in.

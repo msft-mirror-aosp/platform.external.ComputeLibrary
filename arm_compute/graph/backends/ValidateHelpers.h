@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -181,42 +181,6 @@ Status validate_convolution_layer(ConvolutionLayerNode &node)
     }
 
     return status;
-}
-
-/** Validates a Convolution layer node
- *
- * @tparam GEMMConvolutionLayer      GEMM Convolution layer function type
- *
- * @param[in] node Node to validate
- *
- * @return Status
- */
-template <typename GEMMConvolutionLayer>
-Status validate_fused_convolution_with_post_op(FusedConvolutionWithPostOpNode &node)
-{
-    ARM_COMPUTE_LOG_GRAPH_VERBOSE("Validating fused ConvolutionLayer node with ID : " << node.id() << " and Name: " << node.name() << std::endl);
-    ARM_COMPUTE_RETURN_ERROR_ON(node.num_inputs() != 4);
-    ARM_COMPUTE_RETURN_ERROR_ON(node.num_outputs() != 1);
-
-    // Extract IO and info
-    arm_compute::ITensorInfo *input   = get_backing_tensor_info(node.input(0));
-    arm_compute::ITensorInfo *weights = get_backing_tensor_info(node.input(1));
-    arm_compute::ITensorInfo *biases  = get_backing_tensor_info(node.input(2));
-    arm_compute::ITensorInfo *output  = get_backing_tensor_info(node.output(0));
-
-    if(is_data_type_quantized_asymmetric(input->data_type()))
-    {
-        biases->set_data_type(DataType::S32);
-    }
-
-    const PadStrideInfo conv_info = node.convolution_info();
-    //const ConvolutionMethod conv_algorithm = node.convolution_method();
-    //const bool              fast_math      = node.fast_math_hint() == FastMathHint::Enabled;
-    const unsigned int num_groups = node.num_groups();
-
-    // Validate function
-    return GEMMConvolutionLayer::validate(input, weights, biases, output, conv_info,
-                                          WeightsInfo(), Size2D(1, 1), ActivationLayerInfo(), num_groups);
 }
 
 /** Validates a Depthwise Convolution layer node
@@ -690,6 +654,50 @@ Status validate_strided_slice_layer(StridedSliceLayerNode &node)
     return StridedSliceLayer::validate(input, output, starts, ends, strides, info.begin_mask(), info.end_mask(), info.shrink_axis_mask());
 }
 
+/** Validates a Upsample layer node
+ *
+ * @tparam UpsampleLayer Upsample layer type
+ *
+ * @param[in] node Node to validate
+ *
+ * @return Status
+ */
+template <typename UpsampleLayer>
+Status validate_upsample_layer(UpsampleLayerNode &node)
+{
+    ARM_COMPUTE_LOG_GRAPH_VERBOSE("Validating UpsampleLayer node with ID : " << node.id() << " and Name: " << node.name() << std::endl);
+    ARM_COMPUTE_RETURN_ERROR_ON(node.num_inputs() != 1);
+    ARM_COMPUTE_RETURN_ERROR_ON(node.num_outputs() != 1);
+
+    // Extract input and output
+    arm_compute::ITensorInfo *input  = detail::get_backing_tensor_info(node.input(0));
+    arm_compute::ITensorInfo *output = get_backing_tensor_info(node.output(0));
+
+    // Validate function
+    return UpsampleLayer::validate(input, output, node.info(), node.upsampling_policy());
+}
+/** Validates a YOLO layer node
+ *
+ * @tparam YOLOLayer YOLO layer type
+ *
+ * @param[in] node Node to validate
+ *
+ * @return Status
+ */
+template <typename YOLOLayer>
+Status validate_yolo_layer(YOLOLayerNode &node)
+{
+    ARM_COMPUTE_LOG_GRAPH_VERBOSE("Validating YOLOLayer node with ID : " << node.id() << " and Name: " << node.name() << std::endl);
+    ARM_COMPUTE_RETURN_ERROR_ON(node.num_inputs() != 1);
+    ARM_COMPUTE_RETURN_ERROR_ON(node.num_outputs() != 1);
+
+    // Extract input and output
+    arm_compute::ITensorInfo *input  = detail::get_backing_tensor_info(node.input(0));
+    arm_compute::ITensorInfo *output = get_backing_tensor_info(node.output(0));
+
+    // Validate function
+    return YOLOLayer::validate(input, output, node.activation_info(), node.num_classes());
+}
 /** Validates a element-wise layer node
  *
  * @param[in] node Node to validate
@@ -729,10 +737,6 @@ Status validate_eltwise_Layer(EltwiseLayerNode &node)
     else if(eltwise_op == EltwiseOperation::Max)
     {
         return EltwiseLayerFunctions::ElementwiseMax::validate(input1, input2, output, act_info);
-    }
-    else if(eltwise_op == EltwiseOperation::Div)
-    {
-        return EltwiseLayerFunctions::ArithmeticDivision::validate(input1, input2, output, act_info);
     }
     else
     {

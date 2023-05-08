@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -29,8 +29,9 @@
 #include "arm_compute/core/Types.h"
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/runtime/NEON/NEScheduler.h"
-#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEBatchNormalizationLayerKernel.h"
+
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -44,9 +45,8 @@ NEBatchNormalizationLayer::NEBatchNormalizationLayer()
 void NEBatchNormalizationLayer::configure(ITensor *input, ITensor *output, const ITensor *mean, const ITensor *var, const ITensor *beta, const ITensor *gamma, float epsilon,
                                           ActivationLayerInfo act_info)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, output, mean, var, beta, gamma, epsilon, act_info);
     // Configure kernel
-    _norm_kernel = std::make_unique<NEBatchNormalizationLayerKernel>();
+    _norm_kernel = arm_compute::support::cpp14::make_unique<NEBatchNormalizationLayerKernel>();
     _norm_kernel->configure(input, output, mean, var, beta, gamma, epsilon, act_info);
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,15 +35,10 @@ namespace graph
 class SyntheticDataTypeMutator final : public IGraphMutator
 {
 public:
-    // Constructor
-    SyntheticDataTypeMutator(DataType mutate_type = DataType::QASYMM8);
     // Inherited methods overridden
     virtual void mutate(Graph &g) override;
     MutationType type() const override;
     const char *name() override;
-
-private:
-    DataType _mutate_type;
 };
 } // namespace graph
 } // namespace arm_compute

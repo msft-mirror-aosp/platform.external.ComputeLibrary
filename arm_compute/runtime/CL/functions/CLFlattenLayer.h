@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,39 +25,23 @@
 #define ARM_COMPUTE_CLFLATTENLAYER_H
 
 #include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/IFunction.h"
+#include "arm_compute/runtime/CL/ICLSimpleFunction.h"
 
-#include <memory>
 namespace arm_compute
 {
 class CLCompileContext;
 class ICLTensor;
 class ITensorInfo;
 
-/** Basic function to execute flatten */
-class CLFlattenLayer : public IFunction
+/** Basic function to execute flatten. This function calls the following OpenCL kernel:
+*
+* -# @ref CLFlattenLayerKernel
+*
+*/
+class CLFlattenLayer : public ICLSimpleFunction
 {
 public:
-    CLFlattenLayer();
-    /** Destructor */
-    ~CLFlattenLayer();
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    CLFlattenLayer(const CLFlattenLayer &) = delete;
-    /** Default move constructor */
-    CLFlattenLayer(CLFlattenLayer &&);
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    CLFlattenLayer &operator=(const CLFlattenLayer &) = delete;
-    /** Default move assignment operator */
-    CLFlattenLayer &operator=(CLFlattenLayer &&);
     /** Initialise the kernel's input and output.
-     *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @param[in]  input  First input tensor to flatten with at least 3 dimensions.
      *                    The dimensions above the third will be interpreted as batches. Data types supported: All.
@@ -84,13 +68,6 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output);
-
-    // Inherited methods overridden:
-    void run() override;
-
-private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 

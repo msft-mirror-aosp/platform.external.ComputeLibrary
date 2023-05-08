@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,16 +24,13 @@
 #include "arm_compute/runtime/NEON/functions/NEReorgLayer.h"
 
 #include "src/core/NEON/kernels/NEReorgLayerKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 void NEReorgLayer::configure(const ITensor *input, ITensor *output, int32_t stride)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, output, stride);
-
-    auto k = std::make_unique<NEReorgLayerKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<NEReorgLayerKernel>();
     k->configure(input, output, stride);
     _kernel = std::move(k);
 }

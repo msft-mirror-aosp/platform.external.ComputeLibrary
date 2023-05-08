@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -135,7 +135,6 @@ public:
     DummyAccessor(DummyAccessor &&) = default;
 
     // Inherited methods overriden:
-    bool access_tensor_data() override;
     bool access_tensor(ITensor &tensor) override;
 
 private:
@@ -460,7 +459,7 @@ private:
  */
 inline std::unique_ptr<graph::ITensorAccessor> get_random_accessor(PixelValue lower, PixelValue upper, const std::random_device::result_type seed = 0)
 {
-    return std::make_unique<RandomAccessor>(lower, upper, seed);
+    return arm_compute::support::cpp14::make_unique<RandomAccessor>(lower, upper, seed);
 }
 
 /** Generates appropriate weights accessor according to the specified path
@@ -479,11 +478,11 @@ inline std::unique_ptr<graph::ITensorAccessor> get_weights_accessor(const std::s
 {
     if(path.empty())
     {
-        return std::make_unique<DummyAccessor>();
+        return arm_compute::support::cpp14::make_unique<DummyAccessor>();
     }
     else
     {
-        return std::make_unique<NumPyBinLoader>(path + data_file, file_layout);
+        return arm_compute::support::cpp14::make_unique<NumPyBinLoader>(path + data_file, file_layout);
     }
 }
 
@@ -501,12 +500,12 @@ inline std::unique_ptr<graph::ITensorAccessor> get_input_accessor(const arm_comp
 {
     if(!graph_parameters.validation_file.empty())
     {
-        return std::make_unique<ValidationInputAccessor>(graph_parameters.validation_file,
-                                                         graph_parameters.validation_path,
-                                                         std::move(preprocessor),
-                                                         bgr,
-                                                         graph_parameters.validation_range_start,
-                                                         graph_parameters.validation_range_end);
+        return arm_compute::support::cpp14::make_unique<ValidationInputAccessor>(graph_parameters.validation_file,
+                                                                                 graph_parameters.validation_path,
+                                                                                 std::move(preprocessor),
+                                                                                 bgr,
+                                                                                 graph_parameters.validation_range_start,
+                                                                                 graph_parameters.validation_range_end);
     }
     else
     {
@@ -514,17 +513,17 @@ inline std::unique_ptr<graph::ITensorAccessor> get_input_accessor(const arm_comp
         const std::string &image_file_lower = lower_string(image_file);
         if(arm_compute::utility::endswith(image_file_lower, ".npy"))
         {
-            return std::make_unique<NumPyBinLoader>(image_file, graph_parameters.data_layout);
+            return arm_compute::support::cpp14::make_unique<NumPyBinLoader>(image_file, graph_parameters.data_layout);
         }
         else if(arm_compute::utility::endswith(image_file_lower, ".jpeg")
                 || arm_compute::utility::endswith(image_file_lower, ".jpg")
                 || arm_compute::utility::endswith(image_file_lower, ".ppm"))
         {
-            return std::make_unique<ImageAccessor>(image_file, bgr, std::move(preprocessor));
+            return arm_compute::support::cpp14::make_unique<ImageAccessor>(image_file, bgr, std::move(preprocessor));
         }
         else
         {
-            return std::make_unique<DummyAccessor>();
+            return arm_compute::support::cpp14::make_unique<DummyAccessor>();
         }
     }
 }
@@ -549,18 +548,18 @@ inline std::unique_ptr<graph::ITensorAccessor> get_output_accessor(const arm_com
     ARM_COMPUTE_UNUSED(is_validation);
     if(!graph_parameters.validation_file.empty())
     {
-        return std::make_unique<ValidationOutputAccessor>(graph_parameters.validation_file,
-                                                          output_stream,
-                                                          graph_parameters.validation_range_start,
-                                                          graph_parameters.validation_range_end);
+        return arm_compute::support::cpp14::make_unique<ValidationOutputAccessor>(graph_parameters.validation_file,
+                                                                                  output_stream,
+                                                                                  graph_parameters.validation_range_start,
+                                                                                  graph_parameters.validation_range_end);
     }
     else if(graph_parameters.labels.empty())
     {
-        return std::make_unique<DummyAccessor>(0);
+        return arm_compute::support::cpp14::make_unique<DummyAccessor>(0);
     }
     else
     {
-        return std::make_unique<TopNPredictionsAccessor>(graph_parameters.labels, top_n, output_stream);
+        return arm_compute::support::cpp14::make_unique<TopNPredictionsAccessor>(graph_parameters.labels, top_n, output_stream);
     }
 }
 /** Generates appropriate output accessor according to the specified graph parameters
@@ -583,18 +582,18 @@ inline std::unique_ptr<graph::ITensorAccessor> get_detection_output_accessor(con
     ARM_COMPUTE_UNUSED(is_validation);
     if(!graph_parameters.validation_file.empty())
     {
-        return std::make_unique<ValidationOutputAccessor>(graph_parameters.validation_file,
-                                                          output_stream,
-                                                          graph_parameters.validation_range_start,
-                                                          graph_parameters.validation_range_end);
+        return arm_compute::support::cpp14::make_unique<ValidationOutputAccessor>(graph_parameters.validation_file,
+                                                                                  output_stream,
+                                                                                  graph_parameters.validation_range_start,
+                                                                                  graph_parameters.validation_range_end);
     }
     else if(graph_parameters.labels.empty())
     {
-        return std::make_unique<DummyAccessor>(0);
+        return arm_compute::support::cpp14::make_unique<DummyAccessor>(0);
     }
     else
     {
-        return std::make_unique<DetectionOutputAccessor>(graph_parameters.labels, tensor_shapes, output_stream);
+        return arm_compute::support::cpp14::make_unique<DetectionOutputAccessor>(graph_parameters.labels, tensor_shapes, output_stream);
     }
 }
 /** Generates appropriate npy output accessor according to the specified npy_path
@@ -614,11 +613,11 @@ inline std::unique_ptr<graph::ITensorAccessor> get_npy_output_accessor(const std
 {
     if(npy_path.empty())
     {
-        return std::make_unique<DummyAccessor>(0);
+        return arm_compute::support::cpp14::make_unique<DummyAccessor>(0);
     }
     else
     {
-        return std::make_unique<NumPyAccessor>(npy_path, shape, data_type, data_layout, output_stream);
+        return arm_compute::support::cpp14::make_unique<NumPyAccessor>(npy_path, shape, data_type, data_layout, output_stream);
     }
 }
 
@@ -635,11 +634,11 @@ inline std::unique_ptr<graph::ITensorAccessor> get_save_npy_output_accessor(cons
 {
     if(npy_name.empty())
     {
-        return std::make_unique<DummyAccessor>(0);
+        return arm_compute::support::cpp14::make_unique<DummyAccessor>(0);
     }
     else
     {
-        return std::make_unique<SaveNumPyAccessor>(npy_name, is_fortran);
+        return arm_compute::support::cpp14::make_unique<SaveNumPyAccessor>(npy_name, is_fortran);
     }
 }
 
@@ -651,7 +650,7 @@ inline std::unique_ptr<graph::ITensorAccessor> get_save_npy_output_accessor(cons
  */
 inline std::unique_ptr<graph::ITensorAccessor> get_print_output_accessor(std::ostream &output_stream = std::cout)
 {
-    return std::make_unique<PrintAccessor>(output_stream);
+    return arm_compute::support::cpp14::make_unique<PrintAccessor>(output_stream);
 }
 
 /** Permutes a given tensor shape given the input and output data layout
@@ -674,16 +673,20 @@ inline TensorShape permute_shape(TensorShape tensor_shape, DataLayout in_data_la
 
 /** Utility function to return the TargetHint
  *
- * @param[in] target Integer value which expresses the selected target. Must be 0 for Arm® Neon™ or 1 for OpenCL or 2 (OpenCL with Tuner)
+ * @param[in] target Integer value which expresses the selected target. Must be 0 for NEON or 1 for OpenCL or 2 (OpenCL with Tuner)
  *
  * @return the TargetHint
  */
 inline graph::Target set_target_hint(int target)
 {
-    ARM_COMPUTE_ERROR_ON_MSG(target > 2, "Invalid target. Target must be 0 (NEON), 1 (OpenCL), 2 (OpenCL + Tuner)");
+    ARM_COMPUTE_ERROR_ON_MSG(target > 3, "Invalid target. Target must be 0 (NEON), 1 (OpenCL), 2 (OpenCL + Tuner), 3 (GLES)");
     if((target == 1 || target == 2))
     {
         return graph::Target::CL;
+    }
+    else if(target == 3)
+    {
+        return graph::Target::GC;
     }
     else
     {
