@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,8 +25,7 @@
 
 #include "arm_compute/core/Types.h"
 #include "src/core/CL/kernels/CLMeanStdDevNormalizationKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -37,8 +36,7 @@ void CLMeanStdDevNormalizationLayer::configure(ICLTensor *input, ICLTensor *outp
 
 void CLMeanStdDevNormalizationLayer::configure(const CLCompileContext &compile_context, ICLTensor *input, ICLTensor *output, float epsilon)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, output, epsilon);
-    auto k = std::make_unique<CLMeanStdDevNormalizationKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<CLMeanStdDevNormalizationKernel>();
     k->configure(compile_context, input, output, epsilon);
     _kernel = std::move(k);
 }

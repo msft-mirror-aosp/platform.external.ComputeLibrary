@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -58,14 +58,6 @@ public:
     /** Default destructor */
     ~CLStackLayer();
     /** Initialise the kernel's inputs vector and output.
-     *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @note Supported input tensor rank: up to 4
      *

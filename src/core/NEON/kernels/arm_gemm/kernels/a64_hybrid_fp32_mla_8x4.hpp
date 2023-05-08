@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,29 +22,28 @@
  * IN THE SOFTWARE.
  */
 #pragma once
-
 #ifdef __aarch64__
+
 #include "../std_transforms_fixed.hpp"
 
 #define ARGLIST  \
-    unsigned int, const unsigned int *, \
-    IndirectInputArg<float>, \
-    size_t, size_t, \
-    const float *, \
-    IndirectOutputArg<float>, \
-    const float *, Activation, bool
+   unsigned int, const unsigned int *, \
+   IndirectInputArg<float>, \
+   size_t, size_t, \
+   const float *, \
+   IndirectOutputArg<float>, \
+   const float *, Activation, bool
 
 namespace arm_gemm
 {
+
 // Actual kernel implementations
 void a64_hybrid_fp32_mla_8x4( ARGLIST );
-void a64_hybrid_fp32_mla_8x4_a55( ARGLIST );
 
 class cls_a64_hybrid_fp32_mla_8x4
 {
 public:
-    typedef float lhs_operand_type;
-    typedef float rhs_operand_type;
+    typedef float operand_type;
     typedef float result_type;
 
     typedef void (*kern_type)( ARGLIST );
@@ -70,25 +69,17 @@ public:
         return true;
     }
 
-    StdTransformsFixed<rhs_operand_type, result_type, 8, 4, 1> transforms = {};
+    StdTransformsFixed<operand_type, result_type, 8, 4, 1> transforms = {};
 
     // Default to the generic kernel
     kern_type kernel=a64_hybrid_fp32_mla_8x4;
-    cls_a64_hybrid_fp32_mla_8x4(const CPUInfo *ci)
+
+    cls_a64_hybrid_fp32_mla_8x4(const CPUInfo *)
     {
-        switch(ci->get_cpu_model()) {
-            default:
-                break;
-            case CPUModel::A55r1:
-            case CPUModel::A53:
-                kernel=a64_hybrid_fp32_mla_8x4_a55;
-                break;
-        }
     }
 };
 
 } // namespace arm_gemm
 
 #undef ARGLIST
-
 #endif // __aarch64__

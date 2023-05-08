@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2018 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -49,7 +49,7 @@ public:
         src_data = new float[width * height * batch];
         dst_data = new float[width * height * batch];
 
-        // Fill src_data with pseudo(meaningless) values:
+        // Fill src_data with dummy values:
         for(unsigned int b = 0; b < batch; b++)
         {
             for(unsigned int h = 0; h < height; h++)
@@ -140,7 +140,7 @@ public:
     }
     void do_run() override
     {
-        // Run softmax:
+        // Run NEON softmax:
         softmax.run();
     }
     void do_teardown() override

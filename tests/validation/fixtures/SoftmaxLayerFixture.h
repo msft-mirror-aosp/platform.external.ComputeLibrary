@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,24 +59,15 @@ protected:
     template <typename U>
     void fill(U &&tensor)
     {
-        if(tensor.data_type() == DataType::F32)
+        if(!is_data_type_quantized(tensor.data_type()))
         {
-            std::uniform_real_distribution<float> distribution(-10.0f, 10.0f);
+            std::uniform_real_distribution<> distribution(-10.f, 10.f);
             library->fill(tensor, distribution, 0);
         }
-        else if(tensor.data_type() == DataType::F16)
-        {
-            arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -10.0f, 10.0f };
-            library->fill(tensor, distribution, 0);
-        }
-        else if(!is_data_type_quantized(tensor.data_type()))
+        else // data type is quantized_asymmetric (signed or unsigned)
         {
             std::uniform_int_distribution<> distribution(0, 100);
             library->fill(tensor, distribution, 0);
-        }
-        else
-        {
-            library->fill_tensor_uniform(tensor, 0);
         }
     }
 
@@ -91,15 +82,15 @@ protected:
         FunctionType smx_layer;
         smx_layer.configure(&src, &dst, beta, axis);
 
-        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(src));

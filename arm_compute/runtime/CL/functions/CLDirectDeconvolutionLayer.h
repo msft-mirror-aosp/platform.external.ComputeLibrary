@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -87,28 +87,14 @@ public:
     CLDirectDeconvolutionLayer &operator=(CLDirectDeconvolutionLayer &&) = default;
     /** Set the input, weights, biases and output tensors.
      *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0           |src1               |src2   |dst            |
-     * |:--------------|:------------------|:------|:--------------|
-     * |F16            |F16                |F16    |F16            |
-     * |F32            |F32                |F32    |F32            |
-     * |QASYMM8        |QASYMM8            |S32    |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED     |S32    |QASYMM8_SIGNED |
-     * |QASYMM8        |QSYMM8_PER_CHANNEL |S32    |QASYMM8        |
-     * |QASYMM8_SIGNED |QSYMM8_PER_CHANNEL |S32    |QASYMM8_SIGNED |
-     *
      * @param[in,out] input        Input tensor. 3 lower dimensions represent a single input, and an optional 4th dimension for batch of inputs.
      *                             Data types supported: QASYMM8_SIGNED/QASYMM8/F16/F32.
-     * @param[in]     weights      The 4d weights with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input or QSYMM8_PER_CHANNEL if @p input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in]     weights      The 4d weights with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input.
      * @param[in]     bias         (Optional) The biases have one dimension.
      *                             Data type supported: Should match @p input data type, except for input of QASYMM8 and QASYMM8_SIGNED type where biases should be of S32 type
      * @param[out]    output       Output tensor. The output has the same number of dimensions as the @p input.
      * @param[in]     info         Contains padding and policies to be used in the deconvolution, this is decribed in @ref PadStrideInfo.
-     * @param[in]     weights_info (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref opencl::kernels::ClWeightsReshapeKernel.
+     * @param[in]     weights_info (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref CLWeightsReshapeKernel.
      *
      */
     void configure(ICLTensor *input, ICLTensor *weights, const ICLTensor *bias, ICLTensor *output, const PadStrideInfo &info, const WeightsInfo &weights_info = WeightsInfo());
@@ -117,12 +103,12 @@ public:
      * @param[in]     compile_context The compile context to be used.
      * @param[in,out] input           Input tensor. 3 lower dimensions represent a single input, and an optional 4th dimension for batch of inputs.
      *                                Data types supported: QASYMM8_SIGNED/QASYMM8/F16/F32.
-     * @param[in]     weights         The 4d weights with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input or QSYMM8_PER_CHANNEL if @p input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in]     weights         The 4d weights with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input.
      * @param[in]     bias            (Optional) The biases have one dimension.
      *                                Data type supported: Should match @p input data type, except for input of QASYMM8 and QASYMM8_SIGNED type where biases should be of S32 type
      * @param[out]    output          Output tensor. The output has the same number of dimensions as the @p input.
      * @param[in]     info            Contains padding and policies to be used in the deconvolution, this is decribed in @ref PadStrideInfo.
-     * @param[in]     weights_info    (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref opencl::kernels::ClWeightsReshapeKernel.
+     * @param[in]     weights_info    (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref CLWeightsReshapeKernel.
      *
      */
     void configure(const CLCompileContext &compile_context, ICLTensor *input, ICLTensor *weights, const ICLTensor *bias, ICLTensor *output, const PadStrideInfo &info,
@@ -131,12 +117,12 @@ public:
      *
      * @param[in] input        Input tensor info. 3 lower dimensions represent a single input, and an optional 4th dimension for batch of inputs.
      *                         Data types supported: QASYMM8_SIGNED/QASYMM8/F16/F32.
-     * @param[in] weights      The 4d weights info with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input or QSYMM8_PER_CHANNEL if @p input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in] weights      The 4d weights info with dimensions [width, height, IFM, OFM]. Data type supported: Same as @p input.
      * @param[in] bias         (Optional) The biases have one dimension.
      *                         Data type supported: Should match @p input data type, except for input of QASYMM8 and QASYMM8_SIGNED type where biases should be of S32 type
      * @param[in] output       Output tensor info. The output has the same number of dimensions as the @p input.
      * @param[in] info         Contains padding and policies to be used in the deconvolution, this is decribed in @ref PadStrideInfo.
-     * @param[in] weights_info (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref opencl::kernels::ClWeightsReshapeKernel.
+     * @param[in] weights_info (Optional) Weights information needed for @ref CLConvolutionLayer, specifies if the weights tensor has been reshaped with @ref CLWeightsReshapeKernel.
      *
      * @return a status
      */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,9 +25,9 @@
 #define ARM_COMPUTE_CLPERMUTE_H
 
 #include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/IFunction.h"
+#include "arm_compute/runtime/CL/ICLSimpleFunction.h"
 
-#include <memory>
+#include <cstdint>
 
 namespace arm_compute
 {
@@ -35,32 +35,11 @@ class CLCompileContext;
 class ICLTensor;
 class ITensorInfo;
 
-/** Basic function to execute an @ref opencl::kernels::ClPermuteKernel. */
-class CLPermute : public IFunction
+/** Basic function to execute an @ref CLPermuteKernel. */
+class CLPermute : public ICLSimpleFunction
 {
 public:
-    /** Constructor */
-    CLPermute();
-    /** Destructor */
-    ~CLPermute();
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    CLPermute(const CLPermute &) = delete;
-    /** Default move constructor */
-    CLPermute(CLPermute &&) = default;
-    /** Prevent instances of this class from being copied (As this class contains pointers) */
-    CLPermute &operator=(const CLPermute &) = delete;
-    /** Default move assignment operator */
-    CLPermute &operator=(CLPermute &&) = default;
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @note Arbitrary permutation vectors are supported with rank not greater than 4
      *
@@ -90,13 +69,6 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output, const PermutationVector &perm);
-
-    // Inherited methods overridden:
-    void run() override;
-
-private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_CLPERMUTE_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021 Arm Limited.
+ * Copyright (c) 2017 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,9 +24,12 @@
 #ifndef __ARM_COMPUTE_HALF_H__
 #define __ARM_COMPUTE_HALF_H__
 
-#if(BARE_METAL)
+#if(__ANDROID__ || BARE_METAL)
+// Android toolchain is broken and doesn't support all CPP11 math functions.
+#ifndef HALF_ENABLE_CPP11_CMATH
 #define HALF_ENABLE_CPP11_CMATH 0
-#endif /* BARE_METAL */
+#endif /* HALF_ENABLE_CPP11_CMATH */
+#endif /* __ANDROID__ || BARE_METAL */
 
 // Set style to round to nearest
 #define HALF_ROUND_STYLE 1

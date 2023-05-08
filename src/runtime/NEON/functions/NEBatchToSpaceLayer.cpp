@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,22 +28,22 @@
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/Types.h"
 #include "arm_compute/core/Validate.h"
-#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEBatchToSpaceLayerKernel.h"
+
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 void NEBatchToSpaceLayer::configure(const ITensor *input, const ITensor *block_shape, ITensor *output)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, block_shape, output);
-    auto k = std::make_unique<NEBatchToSpaceLayerKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<NEBatchToSpaceLayerKernel>();
     k->configure(input, block_shape, output);
     _kernel = std::move(k);
 }
 
 void NEBatchToSpaceLayer::configure(const ITensor *input, int32_t block_shape_x, int32_t block_shape_y, ITensor *output)
 {
-    auto k = std::make_unique<NEBatchToSpaceLayerKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<NEBatchToSpaceLayerKernel>();
     k->configure(input, block_shape_x, block_shape_y, output);
     _kernel = std::move(k);
 }

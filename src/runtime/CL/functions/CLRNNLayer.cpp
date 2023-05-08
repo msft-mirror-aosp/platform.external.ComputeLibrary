@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,17 +28,28 @@
 #include "arm_compute/core/Utils.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
+#include "src/core/CL/kernels/CLCopyKernel.h"
+#include "src/core/CL/kernels/CLDepthConvertLayerKernel.h"
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyNativeKernel.h"
+#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyReshapedOnlyRHSKernel.h"
+#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionKernel.h"
+#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionOutputStageKernel.h"
+#include "src/core/CL/kernels/CLGEMMLowpReductionKernel.h"
+#include "src/core/CL/kernels/CLGEMMMatrixMultiplyKernel.h"
+#include "src/core/CL/kernels/CLGEMMMatrixMultiplyReshapedKernel.h"
+#include "src/core/CL/kernels/CLGEMMMatrixMultiplyReshapedOnlyRHSKernel.h"
+#include "src/core/CL/kernels/CLGEMMReshapeLHSMatrixKernel.h"
+#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 using namespace arm_compute::misc::shape_calculator;
 
 CLRNNLayer::CLRNNLayer(std::shared_ptr<IMemoryManager> memory_manager)
-    : _memory_group(std::move(memory_manager)), _gemm_state_f(), _add_kernel(), _activation(), _fully_connected_kernel(), _copy(), _fully_connected_out(), _gemm_output(), _add_output(),
-      _is_prepared(false)
+    : _memory_group(std::move(memory_manager)), _gemm_state_f(), _add_kernel(), _activation(), _fully_connected_kernel(), _copy_kernel(support::cpp14::make_unique<CLCopyKernel>()), _fully_connected_out(),
+      _gemm_output(), _add_output(), _is_prepared(false)
 {
 }
 
@@ -85,7 +96,6 @@ void CLRNNLayer::configure(const CLCompileContext &compile_context, const ICLTen
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, weights, recurrent_weights, bias, hidden_state, output);
     ARM_COMPUTE_ERROR_THROW_ON(CLRNNLayer::validate(input->info(), weights->info(), recurrent_weights->info(), bias->info(), hidden_state->info(), output->info(), info));
-    ARM_COMPUTE_LOG_PARAMS(input, weights, recurrent_weights, bias, hidden_state, output, info);
 
     const int   idx_height = get_data_layout_dimension_index(input->info()->data_layout(), DataLayoutDimension::HEIGHT);
     TensorShape shape      = compute_rnn_shape(recurrent_weights->info(), hidden_state->info()->dimension(idx_height));
@@ -113,7 +123,7 @@ void CLRNNLayer::configure(const CLCompileContext &compile_context, const ICLTen
     _activation.configure(compile_context, &_add_output, hidden_state, info);
     _add_output.allocator()->allocate();
 
-    _copy.configure(compile_context, hidden_state, output);
+    _copy_kernel->configure(compile_context, hidden_state, output);
 }
 
 void CLRNNLayer::run()
@@ -128,7 +138,7 @@ void CLRNNLayer::run()
     _activation.run();
 
     // copy hidden out to output
-    _copy.run();
+    CLScheduler::get().enqueue(*_copy_kernel);
 }
 
 void CLRNNLayer::prepare()

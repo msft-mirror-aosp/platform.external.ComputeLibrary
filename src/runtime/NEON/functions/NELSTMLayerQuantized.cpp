@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,7 +26,16 @@
 #include "arm_compute/core/Utils.h"
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/core/utils/quantization/AsymmHelpers.h"
-#include "src/common/utils/Log.h"
+#include "src/core/NEON/kernels/NEConvertFullyConnectedWeightsKernel.h"
+#include "src/core/NEON/kernels/NEConvertQuantizedSignednessKernel.h"
+#include "src/core/NEON/kernels/NEGEMMInterleave4x4Kernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpMatrixMultiplyKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionOutputStageKernel.h"
+#include "src/core/NEON/kernels/NEGEMMLowpReductionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMMatrixAdditionKernel.h"
+#include "src/core/NEON/kernels/NEGEMMMatrixMultiplyKernel.h"
+#include "src/core/NEON/kernels/NEGEMMTranspose1xWKernel.h"
 #include "src/core/helpers/AutoConfiguration.h"
 
 #include <cmath>
@@ -72,10 +81,6 @@ void NELSTMLayerQuantized::configure(const ITensor *input,
                                                               input_to_output_weights->info(),
                                                               recurrent_to_input_weights->info(), recurrent_to_forget_weights->info(), recurrent_to_cell_weights->info(), recurrent_to_output_weights->info(),
                                                               input_gate_bias->info(), forget_gate_bias->info(), cell_bias->info(), output_gate_bias->info(), cell_state_in->info(), output_state_in->info(), cell_state_out->info(), output_state_out->info()));
-
-    ARM_COMPUTE_LOG_PARAMS(input, input_to_input_weights, input_to_forget_weights, input_to_cell_weights, input_to_output_weights,
-                           recurrent_to_input_weights, recurrent_to_forget_weights, recurrent_to_cell_weights, recurrent_to_output_weights,
-                           input_gate_bias, forget_gate_bias, cell_bias, output_gate_bias, cell_state_in, output_state_in, cell_state_out, output_state_out);
 
     const int input_size  = input->info()->dimension(0);
     const int batch_size  = input->info()->dimension(1);
@@ -148,13 +153,7 @@ void NELSTMLayerQuantized::configure(const ITensor *input,
     quantization::calculate_quantized_multiplier(multiplier, &output_multiplier, &output_shift);
 
     _memory_group.manage(&_output_lowp);
-
-    GEMMLowpOutputStageInfo info;
-    info.type                = GEMMLowpOutputStageType::QUANTIZE_DOWN_FIXEDPOINT;
-    info.gemmlowp_multiplier = output_multiplier;
-    info.gemmlowp_shift      = output_shift;
-    info.output_data_type    = DataType::QSYMM16;
-    _output_stage.configure(&_output_highp, &_bias, &_output_lowp, info);
+    _output_stage.configure(&_output_highp, &_bias, &_output_lowp, output_multiplier, output_shift);
     _output_highp.allocator()->allocate();
     _bias.allocator()->allocate();
 
@@ -360,12 +359,7 @@ Status NELSTMLayerQuantized::validate(const ITensorInfo *input,
     ARM_COMPUTE_RETURN_ON_ERROR(quantization::calculate_quantized_multiplier(multiplier, &output_multiplier, &output_shift));
 
     // _output_stage
-    GEMMLowpOutputStageInfo info;
-    info.type                = GEMMLowpOutputStageType::QUANTIZE_DOWN_FIXEDPOINT;
-    info.gemmlowp_multiplier = output_multiplier;
-    info.gemmlowp_shift      = output_shift;
-    info.output_data_type    = DataType::QSYMM16;
-    ARM_COMPUTE_RETURN_ON_ERROR(NEGEMMLowpOutputStage::validate(&output_highp, &bias_concatenated, &output_lowp, info));
+    ARM_COMPUTE_RETURN_ON_ERROR(NEGEMMLowpQuantizeDownInt32ToInt16ScaleByFixedPoint::validate(&output_highp, &bias_concatenated, &output_lowp));
 
     TensorInfo input_gate_input;
     TensorInfo forget_gate_input;

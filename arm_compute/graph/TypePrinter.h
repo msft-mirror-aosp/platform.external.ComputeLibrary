@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -43,13 +43,13 @@ inline ::std::ostream &operator<<(::std::ostream &os, const Target &target)
             os << "UNSPECIFIED";
             break;
         case Target::NEON:
-            os << "Neon";
+            os << "NEON";
             break;
         case Target::CL:
             os << "CL";
             break;
-        case Target::CLVK:
-            os << "CLVK";
+        case Target::GC:
+            os << "GC";
             break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");
@@ -115,12 +115,6 @@ inline ::std::ostream &operator<<(::std::ostream &os, const NodeType &node_type)
             break;
         case NodeType::FusedConvolutionBatchNormalizationLayer:
             os << "FusedConvolutionBatchNormalizationLayer";
-            break;
-        case NodeType::FusedConvolutionBatchNormalizationLayerWithPostOpsLayer:
-            os << "FusedConvolutionBatchNormalizationLayerWithPostOpsLayer";
-            break;
-        case NodeType::FusedConvolutionWithPostOp:
-            os << "FusedConvolutionWithPostOp";
             break;
         case NodeType::FusedDepthwiseConvolutionBatchNormalizationLayer:
             os << "FusedDepthwiseConvolutionBatchNormalizationLayer";
@@ -191,6 +185,9 @@ inline ::std::ostream &operator<<(::std::ostream &os, const NodeType &node_type)
         case NodeType::UpsampleLayer:
             os << "UpsampleLayer";
             break;
+        case NodeType::YOLOLayer:
+            os << "YOLOLayer";
+            break;
         case NodeType::Input:
             os << "Input";
             break;
@@ -223,9 +220,6 @@ inline ::std::ostream &operator<<(::std::ostream &os, const EltwiseOperation &el
             break;
         case EltwiseOperation::Sub:
             os << "Sub";
-            break;
-        case EltwiseOperation::Div:
-            os << "Div";
             break;
         default:
             ARM_COMPUTE_ERROR("NOT_SUPPORTED!");

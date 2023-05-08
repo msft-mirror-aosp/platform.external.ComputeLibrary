@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,6 +24,7 @@
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "arm_compute/runtime/CL/functions/CLBoundingBoxTransform.h"
 #include "tests/CL/CLAccessor.h"
+#include "tests/CL/CLArrayAccessor.h"
 #include "tests/Globals.h"
 #include "tests/framework/Macros.h"
 #include "tests/framework/datasets/Datasets.h"

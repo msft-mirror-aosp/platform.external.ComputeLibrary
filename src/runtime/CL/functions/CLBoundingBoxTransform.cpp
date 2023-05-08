@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,8 +24,7 @@
 #include "arm_compute/runtime/CL/functions/CLBoundingBoxTransform.h"
 
 #include "src/core/CL/kernels/CLBoundingBoxTransformKernel.h"
-
-#include "src/common/utils/Log.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -36,10 +35,8 @@ void CLBoundingBoxTransform::configure(const ICLTensor *boxes, ICLTensor *pred_b
 
 void CLBoundingBoxTransform::configure(const CLCompileContext &compile_context, const ICLTensor *boxes, ICLTensor *pred_boxes, const ICLTensor *deltas, const BoundingBoxTransformInfo &info)
 {
-    ARM_COMPUTE_LOG_PARAMS(boxes, pred_boxes, deltas, info);
-
     // Configure Bounding Box kernel
-    auto k = std::make_unique<CLBoundingBoxTransformKernel>();
+    auto k = arm_compute::support::cpp14::make_unique<CLBoundingBoxTransformKernel>();
     k->configure(compile_context, boxes, pred_boxes, deltas, info);
     _kernel = std::move(k);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -40,10 +40,6 @@
 #include "support/Bfloat16.h"
 #include "support/Half.h"
 
-#ifndef M_PI
-#define M_PI (3.14159265358979323846)
-#endif // M_PI
-
 namespace arm_compute
 {
 namespace support
@@ -70,21 +66,6 @@ template <typename T, typename = typename std::enable_if<std::is_floating_point<
 inline T round(T value)
 {
     return ::round(value);
-}
-
-/** Round floating-point value with half value rounding away from zero and cast to long
- *
- * @note This function implements the same behaviour as std::lround except that it doesn't
- *       support Integral type. The latter is not in the namespace std in some Android toolchains.
- *
- * @param[in] value floating-point value to be rounded.
- *
- * @return Floating-point value of rounded @p value casted to long
- */
-template <typename T, typename = typename std::enable_if<std::is_floating_point<T>::value>::type>
-inline long lround(T value)
-{
-    return ::lround(value);
 }
 
 /** Truncate floating-point value.
@@ -143,12 +124,12 @@ inline T fma(T x, T y, T z)
  *  and writes the result to a character string buffer.
  *
  * @param[in] s    Pointer to a character string to write to
- * @param[in] n    Up to buf_size - 1 characters may be written, plus the null ending character
- * @param[in] fmt  Pointer to a null-ended multibyte string specifying how to interpret the data.
+ * @param[in] n    Up to buf_size - 1 characters may be written, plus the null terminator
+ * @param[in] fmt  Pointer to a null-terminated multibyte string specifying how to interpret the data.
  * @param[in] args Arguments forwarded to snprintf.
  *
  * @return  Number of characters that would have been written for a sufficiently large buffer
- *          if successful (not including the ending null character), or a negative value if an error occurred.
+ *          if successful (not including the terminating null character), or a negative value if an error occurred.
  */
 template <typename... Ts>
 inline int snprintf(char *s, size_t n, const char *fmt, Ts &&... args)
@@ -185,21 +166,6 @@ inline T round(T value)
 {
     //Workaround Valgrind's mismatches: when running from Valgrind the call to std::round(-4.500000) == -4.000000 instead of 5.00000
     return (value < 0.f) ? static_cast<int>(value - 0.5f) : static_cast<int>(value + 0.5f);
-}
-
-/** Round floating-point value with half value rounding away from zero and cast to long
- *
- * @note This function implements the same behaviour as std::lround except that it doesn't
- *       support Integral type. The latter is not in the namespace std in some Android toolchains.
- *
- * @param[in] value floating-point value to be rounded.
- *
- * @return Floating-point value of rounded @p value casted to long
- */
-template <typename T, typename = typename std::enable_if<std::is_floating_point<T>::value>::type>
-inline long lround(T value)
-{
-    return std::lround(value);
 }
 
 /** Truncate floating-point value.
@@ -258,12 +224,12 @@ inline T fma(T x, T y, T z)
  *  and writes the result to a character string buffer.
  *
  * @param[in] s    Pointer to a character string to write to
- * @param[in] n    Up to buf_size - 1 characters may be written, plus the null ending character
- * @param[in] fmt  Pointer to a null-ended multibyte string specifying how to interpret the data.
+ * @param[in] n    Up to buf_size - 1 characters may be written, plus the null terminator
+ * @param[in] fmt  Pointer to a null-terminated multibyte string specifying how to interpret the data.
  * @param[in] args Arguments forwarded to std::snprintf.
  *
  * @return  Number of characters that would have been written for a sufficiently large buffer
- *          if successful (not including the ending null character), or a negative value if an error occurred.
+ *          if successful (not including the terminating null character), or a negative value if an error occurred.
  */
 template <typename... Ts>
 inline int snprintf(char *s, std::size_t n, const char *fmt, Ts &&... args)
@@ -297,7 +263,7 @@ inline bfloat16 lowest<bfloat16>()
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline bool isfinite(T value)
 {
-    return std::isfinite(static_cast<double>(value));
+    return std::isfinite(value);
 }
 
 inline bool isfinite(half_float::half value)
@@ -308,23 +274,6 @@ inline bool isfinite(half_float::half value)
 inline bool isfinite(bfloat16 value)
 {
     return std::isfinite(float(value));
-}
-
-// std::signbit
-template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
-inline bool signbit(T value)
-{
-    return std::signbit(static_cast<double>(value));
-}
-
-inline bool signbit(half_float::half value)
-{
-    return half_float::signbit(value);
-}
-
-inline bool signbit(bfloat16 value)
-{
-    return std::signbit(float(value));
 }
 } // namespace cpp11
 } // namespace support

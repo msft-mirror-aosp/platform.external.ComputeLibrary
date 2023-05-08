@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -168,10 +168,5 @@ bool ITensor::is_used() const
 void ITensor::mark_as_unused() const
 {
     _is_used = false;
-}
-
-void ITensor::mark_as_used() const
-{
-    _is_used = true;
 }
 } // namespace arm_compute

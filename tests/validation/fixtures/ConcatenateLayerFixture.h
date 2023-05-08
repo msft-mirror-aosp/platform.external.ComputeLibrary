@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -70,8 +70,8 @@ public:
         {
             qi = QuantizationInfo(1.f / 255.f, offset_dis(gen));
         }
-        std::bernoulli_distribution           mutate_dis(0.5f);
-        std::uniform_real_distribution<float> change_dis(-0.25f, 0.f);
+        std::bernoulli_distribution      mutate_dis(0.5f);
+        std::uniform_real_distribution<> change_dis(-0.25f, 0.f);
 
         // Generate more shapes based on the input
         for(auto &s : shapes)
@@ -119,20 +119,20 @@ protected:
 
         for(auto &src : srcs)
         {
-            ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+            ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
         }
 
-        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         for(auto &src : srcs)
         {
             src.allocator()->allocate();
-            ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+            ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
         }
 
         dst.allocator()->allocate();
-        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         int i = 0;

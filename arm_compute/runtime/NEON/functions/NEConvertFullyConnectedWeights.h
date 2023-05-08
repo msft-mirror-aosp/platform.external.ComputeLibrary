@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,16 +25,18 @@
 #define ARM_COMPUTE_NECONVERTFULLYCONNECTEDWEIGHTS_H
 
 #include "arm_compute/runtime/IFunction.h"
-
-#include "arm_compute/core/Types.h"
+#include "arm_compute/runtime/ITransformWeights.h"
+#include "arm_compute/runtime/NEON/NEScheduler.h"
+#include "arm_compute/runtime/Tensor.h"
+#include <memory>
 
 namespace arm_compute
 {
 // Forward declarations
 class ITensor;
-class ITensorInfo;
+class NEConvertFullyConnectedWeightsKernel;
 
-/** Basic function to run @ref cpu::kernels::CpuConvertFullyConnectedWeightsKernel. */
+/** Basic function to run @ref NEConvertFullyConnectedWeightsKernel. */
 class NEConvertFullyConnectedWeights : public IFunction
 {
 public:
@@ -51,15 +53,6 @@ public:
     /** Default destructor */
     ~NEConvertFullyConnectedWeights();
     /** Initialize the function.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |All            |All            |
      *
      * @param[in]  input                Source weights tensor to convert. Must be 2 dimensional. Data types supported: All.
      * @param[out] output               The converted weights tensor. Shape and Data Type: Same as @p input.
@@ -82,8 +75,47 @@ public:
     void run() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<NEConvertFullyConnectedWeightsKernel> _kernel;
 };
+
+namespace weights_transformations
+{
+/** Basic function to run @ref NEConvertFullyConnectedWeightsKernel. */
+class NEConvertFullyConnectedWeightsManaged : public ITransformWeights
+{
+public:
+    void run() override
+    {
+        _output.allocator()->allocate();
+        _func.run();
+        _reshape_run = true;
+    }
+
+    void release() override
+    {
+        _output.allocator()->free();
+    }
+
+    ITensor *get_weights() override
+    {
+        return &_output;
+    }
+
+    uint32_t uid() override
+    {
+        return _uid;
+    }
+
+    void configure(const ITensor *input, const TensorShape &original_input_shape, DataLayout data_layout)
+    {
+        _func.configure(input, &_output, original_input_shape, data_layout);
+    }
+
+private:
+    static constexpr uint32_t      _uid = 0x4;
+    Tensor                         _output{};
+    NEConvertFullyConnectedWeights _func{};
+};
+} // namespace weights_transformations
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NECONVERTFULLYCONNECTEDWEIGHTS_H */
