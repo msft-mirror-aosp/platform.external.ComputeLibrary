@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,13 +25,11 @@
 
 #include "arm_compute/core/CL/CLHelpers.h"
 #include "arm_compute/core/CL/CLKernelLibrary.h"
-#include "arm_compute/core/CL/ICLArray.h"
 #include "arm_compute/core/CL/ICLTensor.h"
 #include "arm_compute/core/CL/OpenCL.h"
 #include "arm_compute/core/Helpers.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/Utils.h"
-#include "src/core/AccessWindowStatic.h"
 #include "src/core/CL/CLValidate.h"
 #include "src/core/helpers/AutoConfiguration.h"
 #include "src/core/helpers/WindowHelpers.h"
@@ -70,6 +68,7 @@ Status validate_arguments(const ITensorInfo *anchors, const ITensorInfo *all_anc
 CLComputeAllAnchorsKernel::CLComputeAllAnchorsKernel()
     : _anchors(nullptr), _all_anchors(nullptr)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLComputeAllAnchorsKernel::configure(const ICLTensor *anchors, ICLTensor *all_anchors, const ComputeAnchorsInfo &info)
@@ -80,6 +79,7 @@ void CLComputeAllAnchorsKernel::configure(const ICLTensor *anchors, ICLTensor *a
 void CLComputeAllAnchorsKernel::configure(const CLCompileContext &compile_context, const ICLTensor *anchors, ICLTensor *all_anchors, const ComputeAnchorsInfo &info)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(anchors, all_anchors);
+    auto padding_info = get_padding_info({ anchors, all_anchors });
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(anchors->info(), all_anchors->info(), info));
 
     // Metadata
@@ -123,6 +123,7 @@ void CLComputeAllAnchorsKernel::configure(const CLCompileContext &compile_contex
     // compose the struct.
     Window win = calculate_max_window(*all_anchors->info(), Steps(info.values_per_roi()));
     ICLKernel::configure_internal(win);
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLComputeAllAnchorsKernel::validate(const ITensorInfo *anchors, const ITensorInfo *all_anchors, const ComputeAnchorsInfo &info)

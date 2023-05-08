@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,13 +25,11 @@
 
 #include "arm_compute/core/CL/CLHelpers.h"
 #include "arm_compute/core/CL/CLKernelLibrary.h"
-#include "arm_compute/core/CL/ICLArray.h"
 #include "arm_compute/core/CL/ICLTensor.h"
 #include "arm_compute/core/CL/OpenCL.h"
 #include "arm_compute/core/Helpers.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/Utils.h"
-#include "src/core/AccessWindowStatic.h"
 #include "src/core/CL/CLValidate.h"
 #include "src/core/helpers/AutoConfiguration.h"
 #include "src/core/helpers/WindowHelpers.h"
@@ -87,6 +85,7 @@ Status validate_arguments(const ITensorInfo *boxes, const ITensorInfo *pred_boxe
 CLBoundingBoxTransformKernel::CLBoundingBoxTransformKernel()
     : _boxes(nullptr), _pred_boxes(nullptr), _deltas(nullptr)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLBoundingBoxTransformKernel::configure(const ICLTensor *boxes, ICLTensor *pred_boxes, const ICLTensor *deltas, const BoundingBoxTransformInfo &info)
@@ -97,6 +96,7 @@ void CLBoundingBoxTransformKernel::configure(const ICLTensor *boxes, ICLTensor *
 void CLBoundingBoxTransformKernel::configure(const CLCompileContext &compile_context, const ICLTensor *boxes, ICLTensor *pred_boxes, const ICLTensor *deltas, const BoundingBoxTransformInfo &info)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(boxes, pred_boxes, deltas);
+    auto padding_info = get_padding_info({ boxes, pred_boxes, deltas });
     auto_init_if_empty(*pred_boxes->info(), deltas->info()->clone()->set_data_type(boxes->info()->data_type()).set_quantization_info(boxes->info()->quantization_info()));
 
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(boxes->info(), pred_boxes->info(), deltas->info(), info));
@@ -149,6 +149,7 @@ void CLBoundingBoxTransformKernel::configure(const CLCompileContext &compile_con
     const unsigned int num_elems_processed_per_iteration = 4;
     Window             win                               = calculate_max_window(*deltas->info(), Steps(num_elems_processed_per_iteration));
     ICLKernel::configure_internal(win);
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLBoundingBoxTransformKernel::validate(const ITensorInfo *boxes, const ITensorInfo *pred_boxes, const ITensorInfo *deltas, const BoundingBoxTransformInfo &info)

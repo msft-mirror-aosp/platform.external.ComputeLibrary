@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -63,9 +63,14 @@ protected:
         switch(tensor.data_type())
         {
             case DataType::F16:
+            {
+                arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
+                library->fill(tensor, distribution, i);
+                break;
+            }
             case DataType::F32:
             {
-                std::uniform_real_distribution<> distribution(-1.f, 1.f);
+                std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
                 library->fill(tensor, distribution, i);
                 break;
             }
@@ -83,24 +88,25 @@ protected:
 
         // Create and configure function
         FunctionType f;
-        f.configure(&a, &b);
+        f.configure(a.info(), b.info());
 
-        ARM_COMPUTE_EXPECT(a.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(b.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(a.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(b.info()->is_resizable());
 
         // Allocate tensors
         a.allocator()->allocate();
         b.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!a.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!b.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!a.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!b.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(a), 0);
         fill(AccessorType(b), 0);
 
-        // Compute GEMM function
-        f.run();
+        // Compute GEMM interleave kernel
+        ITensorPack tensors{ { ACL_SRC, &a }, { ACL_DST, &b } };
+        f.run(tensors);
         return b;
     }
 

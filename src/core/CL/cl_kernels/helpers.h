@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2023 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -44,6 +44,7 @@
 
 #define GPU_ARCH_MIDGARD 0x100
 #define GPU_ARCH_BIFROST 0x200
+#define GPU_ARCH_VALHALL 0x300
 
 /** Concatenate two inputs.
  *
@@ -110,18 +111,22 @@
  * @{
  */
 #define ROT1_0(x) ((x))
+#define ROT1_1(x) ((x))
 
 #define ROT2_0(x) ((x))
 #define ROT2_1(x) ((x).s10)
+#define ROT2_2(x) ((x))
 
 #define ROT3_0(x) ((x))
 #define ROT3_1(x) ((x).s201)
 #define ROT3_2(x) ((x).s120)
+#define ROT3_3(x) ((x))
 
 #define ROT4_0(x) ((x))
 #define ROT4_1(x) ((x).s3012)
 #define ROT4_2(x) ((x).s2301)
 #define ROT4_3(x) ((x).s1230)
+#define ROT4_4(x) ((x))
 
 #define ROT8_0(x) ((x))
 #define ROT8_1(x) ((x).s70123456)
@@ -131,6 +136,7 @@
 #define ROT8_5(x) ((x).s34567012)
 #define ROT8_6(x) ((x).s23456701)
 #define ROT8_7(x) ((x).s12345670)
+#define ROT8_8(x) ((x))
 
 #define ROT16_0(x) ((x))
 #define ROT16_1(x) ((x).sF0123456789ABCDE)
@@ -148,6 +154,7 @@
 #define ROT16_13(x) ((x).s3456789ABCDEF012)
 #define ROT16_14(x) ((x).s23456789ABCDEF01)
 #define ROT16_15(x) ((x).s123456789ABCDEF0)
+#define ROT16_16(x) ((x))
 /** @} */ // end of group ROTs_n
 
 /** Circular-right-shift (rotate-right) the given vector by the given amount.
@@ -196,6 +203,214 @@
 #define VLOAD_STR(size) vload##size
 #define VLOAD(size) VLOAD_STR(size)
 
+/** Extended partial vload that correctly handles scalar values as well.
+ * Load the **lower** 0 to (n-1)th elements of the given vector while minimising the amount of load ops
+ * @name VLOAD_PARTIAL
+ *
+ * @note With this macro, the passed data can be both a vector and a scalar
+ * @note @p load_size needs to be <= @p size
+ * eg 1: Valid
+ * VLOAD_PARTIAL(16, 15) ...;
+ * eg 2: Invalid
+ * VLOAD_PARTIAL(4, 7) ...;
+ *
+ * @param[in] size      The width of @p DATA. Supported values: 1(scalar), 2, 3, 4, 8, 16
+ * @param[in] load_size The number of lower elements to load. Supported values: 1-16, but has to be <= @p size
+ * @{
+ */
+#define VLOAD_PARTIAL_STR(size, load_size) vload_partial_##size##_##load_size
+#define VLOAD_PARTIAL(size, load_size) VLOAD_PARTIAL_STR(size, load_size)
+
+#define NO_LOAD(data, offs, ptr) \
+    {                            \
+    }
+
+// Size == 1 (scalar)
+#define vload_partial_1_0 NO_LOAD
+#define vload_partial_1_1 vload1
+#define vload_partial_1_2 NO_LOAD
+#define vload_partial_1_3 NO_LOAD
+#define vload_partial_1_4 NO_LOAD
+#define vload_partial_1_5 NO_LOAD
+#define vload_partial_1_6 NO_LOAD
+#define vload_partial_1_7 NO_LOAD
+#define vload_partial_1_8 NO_LOAD
+#define vload_partial_1_9 NO_LOAD
+#define vload_partial_1_10 NO_LOAD
+#define vload_partial_1_11 NO_LOAD
+#define vload_partial_1_12 NO_LOAD
+#define vload_partial_1_13 NO_LOAD
+#define vload_partial_1_14 NO_LOAD
+#define vload_partial_1_15 NO_LOAD
+#define vload_partial_1_16 NO_LOAD
+// Size == 2
+#define vload_partial_2_0 NO_LOAD
+#define vload_partial_2_1 vload_partial_1
+#define vload_partial_2_2 vload_partial_2
+#define vload_partial_2_3 NO_LOAD
+#define vload_partial_2_4 NO_LOAD
+#define vload_partial_2_5 NO_LOAD
+#define vload_partial_2_6 NO_LOAD
+#define vload_partial_2_7 NO_LOAD
+#define vload_partial_2_8 NO_LOAD
+#define vload_partial_2_9 NO_LOAD
+#define vload_partial_2_10 NO_LOAD
+#define vload_partial_2_11 NO_LOAD
+#define vload_partial_2_12 NO_LOAD
+#define vload_partial_2_13 NO_LOAD
+#define vload_partial_2_14 NO_LOAD
+#define vload_partial_2_15 NO_LOAD
+#define vload_partial_2_16 NO_LOAD
+// Size == 3
+#define vload_partial_3_0 NO_LOAD
+#define vload_partial_3_1 vload_partial_1
+#define vload_partial_3_2 vload_partial_2
+#define vload_partial_3_3 vload_partial_3
+#define vload_partial_3_4 NO_LOAD
+#define vload_partial_3_5 NO_LOAD
+#define vload_partial_3_6 NO_LOAD
+#define vload_partial_3_7 NO_LOAD
+#define vload_partial_3_8 NO_LOAD
+#define vload_partial_3_9 NO_LOAD
+#define vload_partial_3_10 NO_LOAD
+#define vload_partial_3_11 NO_LOAD
+#define vload_partial_3_12 NO_LOAD
+#define vload_partial_3_13 NO_LOAD
+#define vload_partial_3_14 NO_LOAD
+#define vload_partial_3_15 NO_LOAD
+#define vload_partial_3_16 NO_LOAD
+// Size == 4
+#define vload_partial_4_0 NO_LOAD
+#define vload_partial_4_1 vload_partial_1
+#define vload_partial_4_2 vload_partial_2
+#define vload_partial_4_3 vload_partial_3
+#define vload_partial_4_4 vload_partial_4
+#define vload_partial_4_5 NO_LOAD
+#define vload_partial_4_6 NO_LOAD
+#define vload_partial_4_7 NO_LOAD
+#define vload_partial_4_8 NO_LOAD
+#define vload_partial_4_9 NO_LOAD
+#define vload_partial_4_10 NO_LOAD
+#define vload_partial_4_11 NO_LOAD
+#define vload_partial_4_12 NO_LOAD
+#define vload_partial_4_13 NO_LOAD
+#define vload_partial_4_14 NO_LOAD
+#define vload_partial_4_15 NO_LOAD
+#define vload_partial_4_16 NO_LOAD
+// Size == 8
+#define vload_partial_8_0 NO_LOAD
+#define vload_partial_8_1 vload_partial_1
+#define vload_partial_8_2 vload_partial_2
+#define vload_partial_8_3 vload_partial_3
+#define vload_partial_8_4 vload_partial_4
+#define vload_partial_8_5 vload_partial_5
+#define vload_partial_8_6 vload_partial_6
+#define vload_partial_8_7 vload_partial_7
+#define vload_partial_8_8 vload_partial_8
+#define vload_partial_8_9 NO_LOAD
+#define vload_partial_8_10 NO_LOAD
+#define vload_partial_8_11 NO_LOAD
+#define vload_partial_8_12 NO_LOAD
+#define vload_partial_8_13 NO_LOAD
+#define vload_partial_8_14 NO_LOAD
+#define vload_partial_8_15 NO_LOAD
+#define vload_partial_8_16 NO_LOAD
+// Size == 16
+#define vload_partial_16_0 NO_LOAD
+#define vload_partial_16_1 vload_partial_1
+#define vload_partial_16_2 vload_partial_2
+#define vload_partial_16_3 vload_partial_3
+#define vload_partial_16_4 vload_partial_4
+#define vload_partial_16_5 vload_partial_5
+#define vload_partial_16_6 vload_partial_6
+#define vload_partial_16_7 vload_partial_7
+#define vload_partial_16_8 vload_partial_8
+#define vload_partial_16_9 vload_partial_9
+#define vload_partial_16_10 vload_partial_10
+#define vload_partial_16_11 vload_partial_11
+#define vload_partial_16_12 vload_partial_12
+#define vload_partial_16_13 vload_partial_13
+#define vload_partial_16_14 vload_partial_14
+#define vload_partial_16_15 vload_partial_15
+#define vload_partial_16_16 vload_partial_16
+
+/** Partial vload. Load the **lower** 0 to (n-1)th elements of the given vector while minimising the amount of vload ops
+ * @name vload_partial_n
+ *
+ * @note @p DATA needs to be a vector not a scalar
+ * @note n needs to be <= the vector width of the input variable @p DATA
+ * eg 1: Valid
+ * vload_partial_15(var:float16, 0, 0xabcd);
+ * eg 2: Invalid
+ * vload_partial_7(var:float4, 0, 0xabcd);
+ *
+ * @note in cases n == 1, 2, 3, 4, 8, 16, no extra vload is invoked, thus there's no performance penalty.
+ *
+ * @param[in] DATA   The name of the variable where to load the values
+ * @param[in] OFFSET Offset in n
+ * @param[in] PTR    The base pointer
+ * @{
+ */
+#define vload_partial_1(DATA, OFFSET, PTR) \
+    DATA.s0 = vload1(OFFSET, PTR);
+
+#define vload_partial_2(DATA, OFFSET, PTR) \
+    DATA.s01 = vload2(OFFSET, PTR);
+
+#define vload_partial_3(DATA, OFFSET, PTR) \
+    DATA.s012 = vload3(OFFSET, PTR);
+
+#define vload_partial_4(DATA, OFFSET, PTR) \
+    DATA.s0123 = vload4(OFFSET, PTR);
+
+#define vload_partial_5(DATA, OFFSET, PTR)    \
+    vload_partial_4(DATA.s0123, OFFSET, PTR); \
+    DATA.s4 = vload1(OFFSET, PTR + 4);
+
+#define vload_partial_6(DATA, OFFSET, PTR)    \
+    vload_partial_4(DATA.s0123, OFFSET, PTR); \
+    vload_partial_2(DATA.s45, OFFSET, PTR + 4);
+
+#define vload_partial_7(DATA, OFFSET, PTR)    \
+    vload_partial_4(DATA.s0123, OFFSET, PTR); \
+    vload_partial_3(DATA.s456, OFFSET, PTR + 4);
+
+#define vload_partial_8(DATA, OFFSET, PTR) \
+    DATA.s01234567 = vload8(OFFSET, PTR);
+
+#define vload_partial_9(DATA, OFFSET, PTR)        \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    DATA.s8 = vload1(OFFSET, PTR + 8);
+
+#define vload_partial_10(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_2(DATA.s89, OFFSET, PTR + 8);
+
+#define vload_partial_11(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_3(DATA.s89A, OFFSET, PTR + 8);
+
+#define vload_partial_12(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_4(DATA.s89AB, OFFSET, PTR + 8);
+// For vload_partial_{13,14,15}, an 8-vector size has been passed, because vectors size of size 5,6,7 are not supported
+#define vload_partial_13(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_5(DATA.s89ABCDEF, OFFSET, PTR + 8);
+
+#define vload_partial_14(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_6(DATA.s89ABCDEF, OFFSET, PTR + 8);
+
+#define vload_partial_15(DATA, OFFSET, PTR)       \
+    vload_partial_8(DATA.s01234567, OFFSET, PTR); \
+    vload_partial_7(DATA.s89ABCDEF, OFFSET, PTR + 8);
+
+#define vload_partial_16(DATA, OFFSET, PTR) \
+    DATA = vload16(OFFSET, PTR);
+/** @} */ // end of groupd vload_partial_n
+/** @} */ // end of groupd VLOAD_PARTIAL
+
 #define PIXEL_UNIT4 1
 #define PIXEL_UNIT8 2
 #define PIXEL_UNIT16 4
@@ -223,6 +438,16 @@
 #define read_image2d_halfx4(img, x_coord, y_coord) (half16)(read_imageh(img, (int2)(x_coord, y_coord)), read_imageh(img, (int2)(x_coord + 1, y_coord)), read_imageh(img, (int2)(x_coord + 2, y_coord)), read_imageh(img, (int2)(x_coord + 3, y_coord)));
 #endif // defined(ARM_COMPUTE_OPENCL_FP16_ENABLED) && defined(cl_khr_fp16)
 
+#define write_image2d_floatx1(img, x_coord, y_coord, values) (write_imagef(img, (int2)(x_coord, y_coord), values));
+#define write_image2d_floatx2(img, x_coord, y_coord, values) (write_imagef(img, (int2)(x_coord, y_coord), values.s0123), write_imagef(img, (int2)(x_coord + 1, y_coord), values.s4567));
+#define write_image2d_floatx4(img, x_coord, y_coord, values) (write_imagef(img, (int2)(x_coord, y_coord), values.s0123), write_imagef(img, (int2)(x_coord + 1, y_coord), values.s4567), write_imagef(img, (int2)(x_coord + 2, y_coord), values.s89AB), write_imagef(img, (int2)(x_coord + 3, y_coord), values.sCDEF));
+
+#if defined(ARM_COMPUTE_OPENCL_FP16_ENABLED) && defined(cl_khr_fp16)
+#define write_image2d_halfx1(img, x_coord, y_coord, values) (write_imageh(img, (int2)(x_coord, y_coord), values));
+#define write_image2d_halfx2(img, x_coord, y_coord, values) (write_imageh(img, (int2)(x_coord, y_coord), values.s0123), write_imageh(img, (int2)(x_coord + 1, y_coord), values.s4567));
+#define write_image2d_halfx4(img, x_coord, y_coord, values) (write_imageh(img, (int2)(x_coord, y_coord), values.s0123), write_imageh(img, (int2)(x_coord + 1, y_coord), values.s4567), write_imageh(img, (int2)(x_coord + 2, y_coord), values.s89AB), write_imageh(img, (int2)(x_coord + 3, y_coord), values.sCDEF));
+#endif // defined(ARM_COMPUTE_OPENCL_FP16_ENABLED) && defined(cl_khr_fp16)
+
 /** Utility macro to read a 2D OpenCL image object.
  *
  * @note Coordinates are not normalized
@@ -238,6 +463,22 @@
  */
 #define READ_IMAGE2D_STR(data_type, n0, img, x_coord, y_coord) read_image2d_##data_type##x##n0(img, x_coord, y_coord)
 #define READ_IMAGE2D(data_type, n0, img, x_coord, y_coord) READ_IMAGE2D_STR(data_type, n0, img, x_coord, y_coord)
+
+/** Utility macro to write a 2D OpenCL image object.
+ *
+ * @note Coordinates are not normalized
+ *
+ * @param[in] data_type Data type
+ * @param[in] n0        Number of pixel to write. Only 1,2 and 4 is supported
+ * @param[in] img       OpenCL image object
+ * @param[in] x_coord   The x coordinate for the top-left pixel
+ * @param[in] y_coord   The y coordinate for the top-left pixel
+ * @param[in] values    Values to write
+ *
+ * @{
+ */
+#define WRITE_IMAGE2D_STR(data_type, n0, img, x_coord, y_coord, values) write_image2d_##data_type##x##n0(img, x_coord, y_coord, values)
+#define WRITE_IMAGE2D(data_type, n0, img, x_coord, y_coord, values) WRITE_IMAGE2D_STR(data_type, n0, img, x_coord, y_coord, values)
 
 #define VSTORE_STR(size) vstore##size
 #define VSTORE(size) VSTORE_STR(size)
@@ -496,6 +737,11 @@
 
 #define convert_char1_sat convert_char_sat
 #define convert_uchar1_sat convert_uchar_sat
+#define convert_uchar2_sat convert_uchar2_sat
+#define convert_uchar3_sat convert_uchar3_sat
+#define convert_uchar4_sat convert_uchar4_sat
+#define convert_uchar8_sat convert_uchar8_sat
+#define convert_uchar16_sat convert_uchar16_sat
 #define convert_short1_sat convert_short_sat
 #define convert_ushort1_sat convert_ushort_sat
 #define convert_int1_sat convert_int_sat
@@ -531,6 +777,21 @@
 #define SELECT_VEC_DATA_TYPE(type, size) SELECT_VEC_DATA_TYPE_STR(type, size)
 #define SELECT_DATA_TYPE(type) SELECT_VEC_DATA_TYPE_STR(type, 1)
 
+#define signed_int_vec_dt_uchar(size) char##size
+#define signed_int_vec_dt_char(size) char##size
+#define signed_int_vec_dt_ushort(size) short##size
+#define signed_int_vec_dt_short(size) short##size
+#define signed_int_vec_dt_half(size) short##size
+#define signed_int_vec_dt_uint(size) int##size
+#define signed_int_vec_dt_int(size) int##size
+#define signed_int_vec_dt_float(size) int##size
+#define signed_int_vec_dt_ulong(size) long##size
+#define signed_int_vec_dt_long(size) long##size
+
+#define SIGNED_INT_VEC_DATA_TYPE_STR(type, size) signed_int_vec_dt_##type(size)
+#define SIGNED_INT_VEC_DATA_TYPE(type, size) SIGNED_INT_VEC_DATA_TYPE_STR(type, size)
+#define SIGNED_INT_DATA_TYPE(type) SIGNED_INT_VEC_DATA_TYPE_STR(type, 1)
+
 #define sum_reduce_1(x) (x)
 #define sum_reduce_2(x) ((x).s0) + ((x).s1)
 #define sum_reduce_3(x) sum_reduce_2((x).s01) + ((x).s2)
@@ -540,6 +801,16 @@
 
 #define SUM_REDUCE_STR(x, size) sum_reduce_##size(x)
 #define SUM_REDUCE(x, size) SUM_REDUCE_STR(x, size)
+
+#define prod_reduce_1(x) (x)
+#define prod_reduce_2(x) ((x).s0) * ((x).s1)
+#define prod_reduce_3(x) prod_reduce_2((x).s01) * ((x).s2)
+#define prod_reduce_4(x) prod_reduce_2((x).s01) * prod_reduce_2((x).s23)
+#define prod_reduce_8(x) prod_reduce_4((x).s0123) * prod_reduce_4((x).s4567)
+#define prod_reduce_16(x) prod_reduce_8((x).s01234567) * prod_reduce_8((x).s89ABCDEF)
+
+#define PROD_REDUCE_STR(x, size) prod_reduce_##size(x)
+#define PROD_REDUCE(x, size) PROD_REDUCE_STR(x, size)
 
 #define max_reduce_1(x) (x)
 #define max_reduce_2(x) max(((x).s0), ((x).s1))
@@ -585,6 +856,20 @@
     uint        name##_step_z,   \
     uint        name##_stride_w, \
     uint        name##_step_w,   \
+    uint        name##_offset_first_element_in_bytes
+
+#define TENSOR5D_DECLARATION(name)   \
+    __global uchar *name##_ptr,      \
+    uint        name##_stride_x, \
+    uint        name##_step_x,   \
+    uint        name##_stride_y, \
+    uint        name##_step_y,   \
+    uint        name##_stride_z, \
+    uint        name##_step_z,   \
+    uint        name##_stride_w, \
+    uint        name##_step_w,   \
+    uint        name##_stride_v, \
+    uint        name##_step_v,   \
     uint        name##_offset_first_element_in_bytes
 
 #define CONVERT_TO_VECTOR_STRUCT(name) \
