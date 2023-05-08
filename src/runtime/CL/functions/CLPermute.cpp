@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,31 +23,13 @@
  */
 #include "arm_compute/runtime/CL/functions/CLPermute.h"
 
-#include "arm_compute/core/CL/CLKernelLibrary.h"
 #include "arm_compute/core/CL/ICLTensor.h"
-#include "arm_compute/core/Types.h"
-#include "arm_compute/core/Validate.h"
-#include "src/core/CL/ICLKernel.h"
-#include "src/gpu/cl/operators/ClPermute.h"
-
-#include "src/common/utils/Log.h"
+#include "arm_compute/core/Error.h"
+#include "src/core/CL/kernels/CLPermuteKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
-struct CLPermute::Impl
-{
-    const ICLTensor                   *src{ nullptr };
-    ICLTensor                         *dst{ nullptr };
-    std::unique_ptr<opencl::ClPermute> op{ nullptr };
-};
-
-CLPermute::CLPermute()
-    : _impl(std::make_unique<Impl>())
-{
-}
-
-CLPermute::~CLPermute() = default;
-
 void CLPermute::configure(const ICLTensor *input, ICLTensor *output, const PermutationVector &perm)
 {
     configure(CLKernelLibrary::get().get_compile_context(), input, output, perm);
@@ -55,26 +37,14 @@ void CLPermute::configure(const ICLTensor *input, ICLTensor *output, const Permu
 
 void CLPermute::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output, const PermutationVector &perm)
 {
-    ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
-    ARM_COMPUTE_LOG_PARAMS(input, output, perm);
-
-    _impl->src = input;
-    _impl->dst = output;
-
-    _impl->op = std::make_unique<opencl::ClPermute>();
-    _impl->op->configure(compile_context, _impl->src->info(), _impl->dst->info(), perm);
+    auto k = arm_compute::support::cpp14::make_unique<CLPermuteKernel>();
+    k->configure(compile_context, input, output, perm);
+    _kernel = std::move(k);
 }
 
 Status CLPermute::validate(const ITensorInfo *input, const ITensorInfo *output, const PermutationVector &perm)
 {
-    return opencl::ClPermute::validate(input, output, perm);
-}
-
-void CLPermute::run()
-{
-    ITensorPack pack;
-    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
-    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
-    _impl->op->run(pack);
+    ARM_COMPUTE_RETURN_ON_ERROR(CLPermuteKernel::validate(input, output, perm));
+    return Status{};
 }
 } // namespace arm_compute

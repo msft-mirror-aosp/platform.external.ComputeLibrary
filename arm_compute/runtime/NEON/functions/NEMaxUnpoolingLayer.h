@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,11 +32,13 @@ namespace arm_compute
 {
 class ITensor;
 class ITensorInfo;
-class NEFill;
+class NEMemsetKernel;
+class NEMaxUnpoolingLayerKernel;
 
-/** Function to perform MaxUnpooling. This function calls the following kernels:
+/** Function to perform MaxUnpooling. This function calls the following NEON kernels:
  *
- * -# @ref NEFill
+ * -# @ref NEMemsetKernel
+ * -# @ref NEMaxUnpoolingLayerKernel
  */
 class NEMaxUnpoolingLayer : public IFunction
 {
@@ -54,18 +56,6 @@ public:
     /** Default destructor */
     ~NEMaxUnpoolingLayer();
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src            |dst            |
-     * |:--------------|:--------------|
-     * |QASYMM8        |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED |
-     * |F16            |F16            |
-     * |F32            |F32            |
      *
      * @note Only supported pool size 2
      *
@@ -92,9 +82,8 @@ public:
     void run() override;
 
 private:
-    std::unique_ptr<NEFill> _fill_func;
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<NEMemsetKernel>            _memset_kernel;
+    std::unique_ptr<NEMaxUnpoolingLayerKernel> _unpooling_layer_kernel;
 };
 }
 #endif /* ARM_COMPUTE_NEMAXUNPOOLINGLAYER_H */

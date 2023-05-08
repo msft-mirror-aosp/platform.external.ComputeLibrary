@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022 Arm Limited.
+ * Copyright (c) 2018-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,49 +35,17 @@ arm_compute::GPUTarget get_valhall_target(const std::string &version)
     {
         return arm_compute::GPUTarget::G77;
     }
-    else if(version.find("G57") != std::string::npos)
+    else if(version.find("TBOX") != std::string::npos)
     {
-        return arm_compute::GPUTarget::G57;
+        return arm_compute::GPUTarget::TBOX;
     }
-    if(version.find("G68") != std::string::npos)
+    else if(version.find("TODX") != std::string::npos)
     {
-        return arm_compute::GPUTarget::G68;
-    }
-    if(version.find("G78AE") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G78AE;
-    }
-    if(version.find("G78") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G78;
-    }
-    else if(version.find("G710") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G710;
-    }
-    else if(version.find("G610") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G610;
-    }
-    else if(version.find("G510") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G510;
-    }
-    else if(version.find("G310") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G310;
-    }
-    else if(version.find("G715") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G715;
-    }
-    else if(version.find("G615") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G615;
+        return arm_compute::GPUTarget::TODX;
     }
     else
     {
-        return arm_compute::GPUTarget::UNKNOWN;
+        return arm_compute::GPUTarget::VALHALL;
     }
 }
 
@@ -114,10 +82,6 @@ arm_compute::GPUTarget get_bifrost_target(const std::string &version)
     else if(version.find("G76") != std::string::npos)
     {
         return arm_compute::GPUTarget::G76;
-    }
-    else if(version.find("G31") != std::string::npos)
-    {
-        return arm_compute::GPUTarget::G31;
     }
     else
     {
@@ -163,21 +127,12 @@ const std::string &string_from_target(GPUTarget target)
         { GPUTarget::G51, "g51" },
         { GPUTarget::G51BIG, "g51big" },
         { GPUTarget::G51LIT, "g51lit" },
-        { GPUTarget::G31, "g31" },
-        { GPUTarget::G76, "g76" },
         { GPUTarget::G52, "g52" },
         { GPUTarget::G52LIT, "g52lit" },
+        { GPUTarget::G76, "g76" },
         { GPUTarget::G77, "g77" },
-        { GPUTarget::G57, "g57" },
-        { GPUTarget::G78, "g78" },
-        { GPUTarget::G68, "g68" },
-        { GPUTarget::G78AE, "g78ae" },
-        { GPUTarget::G710, "g710" },
-        { GPUTarget::G610, "g610" },
-        { GPUTarget::G510, "g510" },
-        { GPUTarget::G310, "g310" },
-        { GPUTarget::G715, "g715" },
-        { GPUTarget::G615, "g615" },
+        { GPUTarget::TBOX, "tbox" },
+        { GPUTarget::TODX, "todx" }
     };
 
     return gpu_target_map[target];
@@ -191,7 +146,7 @@ GPUTarget get_target_from_name(const std::string &device_name)
 
     if(!found_mali)
     {
-        ARM_COMPUTE_LOG_INFO_MSG_CORE("Can't find valid Arm® Mali™ GPU. Target is set to default.");
+        ARM_COMPUTE_LOG_INFO_MSG_CORE("Can't find valid Mali GPU. Target is set to default.");
         return GPUTarget::MIDGARD;
     }
 
@@ -205,17 +160,11 @@ GPUTarget get_target_from_name(const std::string &device_name)
     GPUTarget gpu_target;
     if(target == 'G' || is_future_gpu)
     {
-        // Check for Valhall or Bifrost
-        gpu_target = get_valhall_target(version);
+        // Check for Bifrost or Valhall
+        gpu_target = get_bifrost_target(version);
         if(gpu_target == GPUTarget::UNKNOWN)
         {
-            gpu_target = get_bifrost_target(version);
-        }
-
-        // Default GPUTarget
-        if(gpu_target == GPUTarget::UNKNOWN)
-        {
-            gpu_target = GPUTarget::VALHALL;
+            gpu_target = get_valhall_target(version);
         }
     }
     else if(target == 'T')
@@ -230,7 +179,7 @@ GPUTarget get_target_from_name(const std::string &device_name)
     // Report in case of unknown target
     if(gpu_target == GPUTarget::UNKNOWN)
     {
-        ARM_COMPUTE_LOG_INFO_MSG_CORE("Arm® Mali™ Mali GPU unknown. Target is set to the default one. (BIFROST)");
+        ARM_COMPUTE_LOG_INFO_MSG_CORE("Mali GPU unknown. Target is set to the default one. (BIFROST)");
         return GPUTarget::BIFROST;
     }
 

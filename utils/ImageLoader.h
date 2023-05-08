@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -182,7 +182,7 @@ public:
         ARM_COMPUTE_ERROR_ON(_feeder.get() == nullptr);
         try
         {
-            // Map buffer if creating a CLTensor
+            // Map buffer if creating a CLTensor/GCTensor
             map(image, true);
 
             // Validate feeding data
@@ -238,7 +238,7 @@ public:
                     ARM_COMPUTE_ERROR("Unsupported format");
             }
 
-            // Unmap buffer if creating a CLTensor
+            // Unmap buffer if creating a CLTensor/GCTensor
             unmap(image);
         }
         catch(const std::ifstream::failure &e)
@@ -392,7 +392,7 @@ public:
             ARM_COMPUTE_ERROR_ON_MSG_VAR(max_val >= 256, "2 bytes per colour channel not supported in file %s",
                                          filename.c_str());
 
-            _feeder = std::make_unique<FileImageFeeder>(_fs);
+            _feeder = support::cpp14::make_unique<FileImageFeeder>(_fs);
         }
         catch(std::runtime_error &e)
         {
@@ -467,7 +467,7 @@ public:
             _height    = height;
             _data      = std::unique_ptr<uint8_t, malloc_deleter>(rgb_image);
             _is_loaded = true;
-            _feeder    = std::make_unique<MemoryImageFeeder>(_data.get());
+            _feeder    = support::cpp14::make_unique<MemoryImageFeeder>(_data.get());
         }
     }
     void close() override
@@ -512,9 +512,9 @@ public:
         switch(type)
         {
             case ImageType::PPM:
-                return std::make_unique<PPMLoader>();
+                return support::cpp14::make_unique<PPMLoader>();
             case ImageType::JPEG:
-                return std::make_unique<JPEGLoader>();
+                return support::cpp14::make_unique<JPEGLoader>();
             case ImageType::UNKNOWN:
             default:
                 return nullptr;

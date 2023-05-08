@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -29,7 +29,7 @@
 namespace arm_compute
 {
 RuntimeContext::RuntimeContext()
-    : _owned_scheduler(SchedulerFactory::create()), _scheduler(_owned_scheduler.get())
+    : _owned_scheduler(SchedulerFactory::create()), _scheduler(_owned_scheduler.get()), _device_props()
 {
 }
 
@@ -47,5 +47,10 @@ IScheduler *RuntimeContext::scheduler()
 IAssetManager *RuntimeContext::asset_manager()
 {
     return nullptr;
+}
+
+const DeviceProperties &RuntimeContext::properties()
+{
+    return _device_props;
 }
 } // namespace arm_compute

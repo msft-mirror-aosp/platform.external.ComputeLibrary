@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,10 +27,7 @@
 #include <cassert>
 
 #include "arm_gemm.hpp"
-#include "bfloat.hpp"
 #include "convolver.hpp"
-#include "kernel_weight_format.hpp"
-#include "kernel_traits.hpp"
 #include "mergeresults.hpp"
 #include "performance_parameters.hpp"
 #include "quantized.hpp"
@@ -59,7 +56,7 @@ namespace {
 // Others output directly to the matrix result.  This helper class calls the
 // appropriate functions, using templating to avoid calling non-existent
 // functions.
-template<bool MergeStep, bool FixedFormat, typename OutputStage>
+template<bool MergeStep, typename OutputStage>
 class kernel_and_merge {
 public:
     template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
@@ -67,7 +64,7 @@ public:
 #ifdef CYCLE_PROFILING
         profiler &prof,
 #endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t b_stride, Tri *c_panel,
+        strategy &strat, const To *a_ptr, const To *b_panel, Tri *c_panel,
         Tr *c_ptr, int ldc, int kern_k, unsigned int m_0,
         unsigned int m_max, unsigned int n_0, unsigned int n_max, const Tr *biasptr,
         const Activation &act, bool accumulate, const OutputStage &os, const int32_t *col_bias,
@@ -77,11 +74,11 @@ public:
 // Run a kernel and call the separate merge step
 template<>
 template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
-void kernel_and_merge<true, false, Nothing>::run(
+void kernel_and_merge<true, Nothing>::run(
 #ifdef CYCLE_PROFILING
         profiler &prof,
 #endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t, Tri *c_panel,
+        strategy &strat, const To *a_ptr, const To *b_panel, Tri *c_panel,
         Tr *c_ptr, int ldc, int kern_k, unsigned int m_0,
         unsigned int m_max, unsigned int n_0, unsigned int n_max, const Tr *biasptr,
         const Activation &act, bool accumulate, const Nothing &, const int32_t *, Tab *)
@@ -104,44 +101,14 @@ void kernel_and_merge<true, false, Nothing>::run(
     }
 }
 
-// Run a fixed-format kernel and call the separate merge step
-template<>
-template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
-void kernel_and_merge<true, true, Nothing>::run(
-#ifdef CYCLE_PROFILING
-        profiler &prof,
-#endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t b_stride, Tri *c_panel,
-        Tr *c_ptr, int ldc, int kern_k, unsigned int m_0,
-        unsigned int m_max, unsigned int n_0, unsigned int n_max, const Tr *biasptr,
-        const Activation &act, bool accumulate, const Nothing &, const int32_t *, Tab *)
-{
-    {
-#ifdef CYCLE_PROFILING
-        const int bblocks = iceildiv(n_max - n_0, strategy::out_width());
-        auto p=prof.ScopedProfiler(PROFILE_KERNEL, (strategy::out_height() * bblocks * strategy::out_width() * kern_k));
-#endif
-
-        strat.kernel(a_ptr, b_panel, b_stride, c_panel, 1, (n_max - n_0), kern_k);
-    }
-
-    {
-#ifdef CYCLE_PROFILING
-        const int bblocks = iceildiv(n_max - n_0, strategy::out_width());
-        auto p=prof.ScopedProfiler(PROFILE_MERGE, (strategy::out_height() * bblocks * strategy::out_width() * sizeof(Tr)));
-#endif
-        strat.transforms.Merge(c_ptr, c_panel, ldc, m_0, m_max, n_0, n_max, biasptr, act, accumulate);
-    }
-}
-
 // Run a kernel with integrated merge
 template<>
 template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
-void kernel_and_merge<false, false, Nothing>::run(
+void kernel_and_merge<false, Nothing>::run(
 #ifdef CYCLE_PROFILING
         profiler &prof,
 #endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t, Tri *,
+        strategy &strat, const To *a_ptr, const To *b_panel, Tri *,
         Tr *c_ptr, int ldc, int kern_k, unsigned int m_0, unsigned int m_max,
         unsigned int n_0, unsigned int n_max, const Tr *biasptr,
         const Activation &act, bool accumulate, const Nothing &, const int32_t *,
@@ -176,11 +143,11 @@ void kernel_and_merge<false, false, Nothing>::run(
 // Run a kernel with integrated merge, quantizing
 template<>
 template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
-void kernel_and_merge<false, false, Requantize32>::run(
+void kernel_and_merge<false, Requantize32>::run(
 #ifdef CYCLE_PROFILING
         profiler &prof,
 #endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t, Tri *,
+        strategy &strat, const To *a_ptr, const To *b_panel, Tri *,
         Tr *c_ptr, int ldc, int kern_k, unsigned int m_0, unsigned int m_max,
         unsigned int n_0, unsigned int n_max, const Tr *,
         const Activation &, bool accumulate, const Requantize32 &qp, const int32_t *col_bias,
@@ -203,11 +170,11 @@ void kernel_and_merge<false, false, Requantize32>::run(
 // Run a kernel and call the separate quantize step
 template<>
 template<typename strategy, typename To, typename Tr, typename Tri, typename Tab>
-void kernel_and_merge<true, false, Requantize32>::run(
+void kernel_and_merge<true, Requantize32>::run(
 #ifdef CYCLE_PROFILING
         profiler &prof,
 #endif
-        strategy &strat, const To *a_ptr, const To *b_panel, size_t, Tri *c_panel,
+        strategy &strat, const To *a_ptr, const To *b_panel, Tri *c_panel,
         Tr *c_ptr, int ldc, int kern_k, unsigned int m_0,
         unsigned int m_max, unsigned int n_0, unsigned int n_max, const Tr *,
         const Activation &, bool, const Requantize32 &qp, const int32_t *col_bias,
@@ -225,7 +192,7 @@ void kernel_and_merge<true, false, Requantize32>::run(
 
     {
 #ifdef CYCLE_PROFILING
-        auto p=prof.ScopedProfiler(PROFILE_QUANTIZE, ((m_max-m_0) * bblocks * strategy::out_width() * sizeof(Tr)));
+        auto p=prof.ScopedProfiler(PROFILE_QUANTIZE, (strategy::out_height() * bblocks * strategy::out_width() * sizeof(Tr)));
 #endif
         // The interleaved kernel outputs in blocks - each block is a
         // row-major matrix of size out_width * out_height.  The merge
@@ -279,49 +246,9 @@ public:
     typedef int32_t type;
 };
 
-// Stripe width is a concept only needed for FixedFormat kernels.  Use an accessor to avoid issues in other scenarios.
-template<typename strategy, bool FixedFormat>
-struct get_stripe_width {
-    static unsigned int get() {
-        return 0;
-    }
-};
-
-template<typename strategy>
-struct get_stripe_width<strategy, true> {
-    static unsigned int get() {
-        return strategy::stripe_width();
-    }
-};
-
-// KernelWeightFormat is a similar story.
-template<typename strategy, bool FixedFormat, typename To>
-struct get_kernel_weight_format {
-    static KernelWeightFormat get() {
-        return KernelWeightFormat::NON_FIXED;
-    }
-};
-
-template<typename strategy, typename To>
-struct get_kernel_weight_format<strategy, true, To> {
-    static KernelWeightFormat get() {
-        KernelWeightFormat kwf = strategy::kernel_weight_format();
-
-        // If we are using a BF16 kernel to do an FP32 problem (fast mode) then we need to set the BF16 flag on the
-        // weight format.
-        if (std::is_same<To, float>::value && std::is_same<typename strategy::operand_type, bfloat16>::value) {
-            uint32_t kwf_i = static_cast<uint32_t>(kwf);
-            kwf_i |= 0x10;
-            kwf = static_cast<KernelWeightFormat>(kwf_i);
-        }
-
-        return kwf;
-    }
-};
-
 } // anonymous namespace
 
-template<typename strategy, typename To, typename Tr, typename OutputStage=Nothing, bool MergeStep=true, bool FixedFormat=false, bool ForceThreadColumns=false>
+template<typename strategy, typename To, typename Tr, typename OutputStage=Nothing, bool MergeStep=true, bool ForceThreadColumns=false>
 class GemmInterleaved : public GemmCommon<To, Tr> {
     typedef typename strategy::operand_type Toi;
     typedef typename strategy::result_type Tri;
@@ -383,7 +310,7 @@ class GemmInterleaved : public GemmCommon<To, Tr> {
     class blockwalker {
     private:
         /* Size loops, etc. based on our parent's configuration */
-        const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, FixedFormat, ForceThreadColumns> &_parent;
+        const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, ForceThreadColumns> &_parent;
 
         /* K, X and multi parameters for current iteration. */
         unsigned int _k0=0, _x0=0, _multi=0;
@@ -398,9 +325,9 @@ class GemmInterleaved : public GemmCommon<To, Tr> {
         bool _newmulti=true;
 
     public:
-        blockwalker(const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, FixedFormat, ForceThreadColumns> &parent) : _parent(parent) { }
+        blockwalker(const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, ForceThreadColumns> &parent) : _parent(parent) { }
 
-        blockwalker(const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, FixedFormat, ForceThreadColumns> &parent,
+        blockwalker(const GemmInterleaved<strategy, To, Tr, OutputStage, MergeStep, ForceThreadColumns> &parent,
                     unsigned int x_start, unsigned int x_end) : _parent(parent), _x0 (_x_start), _x_start(x_start), _x_end(x_end) { }
 
         unsigned int xmax() {
@@ -569,32 +496,12 @@ class GemmInterleaved : public GemmCommon<To, Tr> {
 
     static unsigned int get_k_block_size(const GemmArgs &args) {
         if (args._cfg && args._cfg->inner_block_size) {
-            return roundup(args._cfg->inner_block_size, strategy::k_unroll());
+            return args._cfg->inner_block_size;
         }
 
         // K blocking not supported if we are requantizing.
         if (std::is_same<OutputStage, Requantize32>::value) {
             return get_ktotal(args);
-        }
-
-        // Special blocking for SME
-        if (is_sme<strategy>::value) {
-            // Don't bother to block below this size threshold, experimentally determined to be 320 for FP32
-            unsigned int scaling_threshold = 1280 / sizeof(Toi);
-
-            if (get_ktotal(args) <= scaling_threshold) {
-                return get_ktotal(args);
-            }
-
-            // Once we are blocking, this (lower) threshold determines when we should use more blocks
-            // NOTE: Could be that some factor-based solution would work better here.
-            unsigned int max_block_size = 1024 / sizeof(Toi);
-
-            unsigned int num_k_blocks = iceildiv(get_ktotal(args), max_block_size);
-
-            unsigned int k_block = roundup(iceildiv(get_ktotal(args), num_k_blocks), strategy::k_unroll());
-
-            return k_block;
         }
 
         const unsigned int L1_size = args._ci->get_L1_cache_size();
@@ -716,7 +623,7 @@ public:
 #endif
 
         /* Make sure we've been set up correctly. */
-        assert(FixedFormat || _B_transposed);
+        assert(_B_transposed);
         assert(_working_space);
         int8_t *working_space_bytes = reinterpret_cast<int8_t *>(_working_space);
 
@@ -759,11 +666,7 @@ public:
                     // Figure out how many "K" the kernel will actually process.
                     unsigned int kern_k = roundup(kmax - k0, strategy::k_unroll());
 
-                    const Toi *b_ptr = FixedFormat ?
-                        reinterpret_cast<const Toi *>(this->_Bptr) + (multi * this->_B_multi_stride) +
-                                                     ((start_x / get_stripe_width<strategy, FixedFormat>::get()) * this->_ldb) +
-                                                     (k0 * get_stripe_width<strategy, FixedFormat>::get()) :
-                        _B_transposed + (rounded_width * _Ktotal * multi) + (k0 * rounded_width) + (start_x * kern_k);
+                    const Toi *b_ptr = _B_transposed + (rounded_width * _Ktotal * multi) + (k0 * rounded_width) + (start_x * kern_k);
 
                     unsigned int batch     = batch_0;
                     unsigned int start_row = (start - (batch_0 * window_per_batch)) * strategy::out_height();
@@ -796,12 +699,12 @@ public:
                         }
 
                         // Perform the kernel and merge step, either separately or together as required.
-                        kernel_and_merge<MergeStep, FixedFormat, OutputStage>::run(
+                        kernel_and_merge<MergeStep, OutputStage>::run(
                         #ifdef CYCLE_PROFILING
                             prof,
                         #endif
                             // Strategy and panel pointers
-                            strat, a_panel, b_ptr, this->_ldb, c_panel,
+                            strat, a_panel, b_ptr, c_panel,
                             // Result buffer pointers
                             this->_Cptr + (batch * this->_C_batch_stride) + (multi * this->_C_multi_stride), this->_ldc,
                             // K size, and M/N ranges
@@ -899,13 +802,6 @@ public:
                     }
                 }
 
-                // For FixedFormat cases, figure out the B pointer.  The loop below moves through batches and vertically through the output so this will be the same throughout.
-                if (FixedFormat) {
-                    b_panel = reinterpret_cast<const Toi *>(this->_Bptr) + (current.multi() * this->_B_multi_stride) +
-                                                                           ((current.x0() / get_stripe_width<strategy, FixedFormat>::get()) * this->_ldb) +
-                                                                           (current.k0() * get_stripe_width<strategy, FixedFormat>::get());
-                }
-
                 /* Do the actual work. */
                 for (unsigned int batch = batch_0; batch <= batch_end; batch++) {
                     unsigned int first_m = (batch == batch_0)   ? m_0   : 0;
@@ -944,12 +840,12 @@ public:
                         }
 
                         // Perform the kernel and merge step, either separately or together as required.
-                        kernel_and_merge<MergeStep, FixedFormat, OutputStage>::run(
+                        kernel_and_merge<MergeStep, OutputStage>::run(
                         #ifdef CYCLE_PROFILING
                             prof,
                         #endif
                             // Strategy and panel pointers
-                            strat, a_ptr, b_panel, this->_ldb, c_panel,
+                            strat, a_ptr, b_panel, c_panel,
                             // Result buffer pointers
                             result_ptr, this->_ldc,
                             // K size, and M/N ranges
@@ -967,9 +863,7 @@ public:
                     }
                 }
 
-                if (FixedFormat == false) {
-                    b_panel += (roundup(current.xmax() - current.x0(), strategy::out_width()) * kern_k);
-                }
+                b_panel += (roundup(current.xmax() - current.x0(), strategy::out_width()) * kern_k);
             }
         }
     }
@@ -1016,24 +910,20 @@ public:
 
     // Interface implementation - pretransposed
     bool B_is_pretransposed() const override {
-        return (FixedFormat == false);
+        return true;
     }
 
     bool B_pretranspose_required() const override {
-        return (FixedFormat == false) && (_B_transposed==nullptr);
+        return (_B_transposed==nullptr);
     }
 
     size_t get_B_pretransposed_array_size() const override {
-        if (FixedFormat) {
-            return 0;
-        }
-
         unsigned int x_size = roundup(_Nsize, strategy::out_width());
 
         return (x_size * _Ktotal * _nmulti * sizeof(Toi)) + get_col_sum_size();
     }
 
-    void requantize_bias(void *in_buffer, const To *B, const int ldb, const int B_multi_stride) override {
+    void pretranspose_B_array(void *in_buffer, const To *B, const int ldb, const int B_multi_stride) override {
         if (std::is_same<OutputStage, Requantize32>::value) {
             col_bias = reinterpret_cast<int32_t *>(in_buffer);
 
@@ -1044,12 +934,8 @@ public:
                 compute_col_sums(*qp_ptr, _Nsize, _Ksize * _Ksections, B + (i * B_multi_stride), ldb, col_bias + (i * _Nsize), _Ksize * _Ksections, i, 0);
             }
         }
-    }
 
-    void pretranspose_B_array(void *in_buffer, const To *B, const int ldb, const int B_multi_stride) override {
-        requantize_bias(in_buffer, B, ldb, B_multi_stride);
-
-        // Put the transposed data after the column sums - in non-quantized cases get_col_sum_size() == 0
+        // Put the transposed data after the column sums - in non-transposing cases get_col_sum_size() == 0
         uintptr_t buffer_int = reinterpret_cast<uintptr_t>(in_buffer);
         Toi *buffer = reinterpret_cast<Toi *>(buffer_int + get_col_sum_size());
         _B_transposed = buffer;
@@ -1061,61 +947,53 @@ public:
             /* Figure out the size of each block. */
             unsigned int k_size = (current.kmax() - current.k0());
 
-            if (_Ksections > 1) {
-                // We need to insert padding at the end of each K section.
-                // The computation needed is a little delicate - the coordinates from the block walker are expressed in
-                // terms of the full, padded, _Ktotal.
-                // But we need to transform each section with reference to the original, unpadded, input, letting the
-                // transform pad each section as needed.
+            // We need to insert padding at the end of each K section.
+            // The computation needed is a little delicate - the coordinates from the block walker are expressed in
+            // terms of the full, padded, _Ktotal.
+            // But we need to transform each section with reference to the original, unpadded, input, letting the
+            // transform pad each section as needed.
 
-                // This is needed for computations below.
-                const unsigned int rounded_section_size = roundup(_Ksize, strategy::k_unroll());
+            // This is needed for computations below.
+            const unsigned int rounded_section_size = roundup(_Ksize, strategy::k_unroll());
 
-                // The expected output format is also an entire <out_width> columns interleaved, then the next set of
-                // columns, and so on.  This means, as we are breaking it up vertically, we have to do it one column at
-                // a time.
-                for (unsigned int x0=current.x0(); x0 < current.xmax(); x0 += strategy::out_width() ) {
-                    unsigned int xmax = std::min(x0 + strategy::out_width(), current.xmax());
+            // The expected output format is also an entire <out_width> columns interleaved, then the next set of
+            // columns, and so on.  This means, as we are breaking it up vertically, we have to do it one column at
+            // a time.
+            for (unsigned int x0=current.x0(); x0 < current.xmax(); x0 += strategy::out_width() ){
+                unsigned int xmax = std::min(x0 + strategy::out_width(), current.xmax());
 
-                    // Track where we are and how much work is left.
-                    unsigned int kpos  = current.k0();
-                    unsigned int kleft = k_size;
+                // Track where we are and how much work is left.
+                unsigned int kpos  = current.k0();
+                unsigned int kleft = k_size;
 
-                    while (kleft) {
-                        // Which section are we in?  Based on the rounded-up section size.
-                        unsigned int k_section_base = kpos / rounded_section_size;
-                        // How far into the section are we?
-                        unsigned int k_offset = kpos - (k_section_base * rounded_section_size);
+                while (kleft) {
+                    // Which section are we in?  Based on the rounded-up section size.
+                    unsigned int k_section_base = kpos / rounded_section_size;
+                    // How far into the section are we?
+                    unsigned int k_offset = kpos - (k_section_base * rounded_section_size);
 
-                        // We will either copy the rest of this section, or to the end of the requested length.
-                        unsigned int k_length = std::min(_Ksize - k_offset, kleft);
+                    // We will either copy the rest of this section, or to the end of the requested length.
+                    unsigned int k_length = std::min(_Ksize - k_offset, kleft);
 
-                        strat.transforms.PrepareB(buffer, B + (current.multi() * B_multi_stride), ldb,
-                                                  x0, xmax,
-                                                  (k_section_base * _Ksize) + k_offset,               // K starting point - compute row to read based on our section and the true section length.
-                                                  (k_section_base * _Ksize) + k_offset + k_length);   // K end point - starting point plus length computed above.
+                    strat.transforms.PrepareB(buffer, B + (current.multi() * B_multi_stride), ldb,
+                                              x0, xmax,
+                                              (k_section_base * _Ksize) + k_offset,               // K starting point - compute row to read based on our section and the true section length.
+                                              (k_section_base * _Ksize) + k_offset + k_length);   // K end point - starting point plus length computed above.
 
-                        // We need to modify our position based on the ROUNDED version of what we just did.
-                        unsigned int padded_length = roundup(k_length, strategy::k_unroll());
+                    // We need to modify our position based on the ROUNDED version of what we just did.
+                    unsigned int padded_length = roundup(k_length, strategy::k_unroll());
 
-                        buffer += strategy::out_width() * padded_length;
+                    buffer += strategy::out_width() * padded_length;
 
-                        kpos  += padded_length;
-                        kleft -= padded_length;
-                    }
+                    kpos  += padded_length;
+                    kleft -= padded_length;
                 }
-            } else {
-                // In the single K section case, can process the whole lot in one go.
-                // Caution: 'blockwalker::kmax()' rounds up, so clamp to valid _Ksize.
-                strat.transforms.PrepareB(buffer, B + (current.multi() * B_multi_stride), ldb,
-                                          current.x0(), current.xmax(), current.k0(), std::min(current.kmax(), _Ksize));
-                buffer += roundup(current.xmax() - current.x0(), strategy::out_width()) * roundup(current.kmax() - current.k0(), strategy::k_unroll());
             }
         } while (current.advance());
     }
 
     void set_pretransposed_B_data(void *in_buffer) override {
-        // Put the transposed data after the column sums - in non-quantized cases get_col_sum_size() == 0
+        // Put the transposed data after the column sums - in non-transposing cases get_col_sum_size() == 0
         uintptr_t buffer_int = reinterpret_cast<uintptr_t>(in_buffer);
         _B_transposed = reinterpret_cast<Toi *>(buffer_int + get_col_sum_size());
         col_bias = reinterpret_cast<int32_t *>(in_buffer);
@@ -1141,15 +1019,12 @@ public:
     }
 
     // Estimate cycles for given problem given provided parameters
-    template<typename perf_type>
-    static uint64_t estimate_cycles(const GemmArgs &args) {
+    static uint64_t estimate_cycles(const GemmArgs &args, const PerformanceParameters &params) {
         unsigned int k_blocks = iceildiv(args._Ksize, get_k_block_size(args));
 
-        const PerformanceParameters &params = strategy::template get_performance_parameters<perf_type>(args._ci);
-
-        uint64_t total_macs    = static_cast<uint64_t>(args._nbatches) * args._nmulti * roundup(args._Msize, strategy::out_height()) * roundup(args._Nsize, strategy::out_width()) * get_ktotal(args);
-        uint64_t prepare_bytes = static_cast<uint64_t>(args._nbatches) * args._nmulti * roundup(args._Msize, strategy::out_height()) * get_ktotal(args) * sizeof(Toi);
-        uint64_t merge_bytes   = static_cast<uint64_t>(args._nbatches) * args._nmulti * k_blocks * args._Msize * roundup(args._Nsize, strategy::out_width()) * sizeof(Tr);
+        uint64_t total_macs    = static_cast<uint64_t>(args._nbatches) * args._nmulti * roundup(args._Msize, strategy::out_height()) * roundup(args._Nsize, strategy::out_width()) * roundup(args._Ksize, strategy::k_unroll());
+        uint64_t prepare_bytes = static_cast<uint64_t>(args._nbatches) * args._nmulti * roundup(args._Msize, strategy::out_height()) * roundup(args._Ksize, strategy::k_unroll()) * sizeof(Toi);
+        uint64_t merge_bytes   = static_cast<uint16_t>(args._nbatches) * args._nmulti * k_blocks * roundup(args._Msize, strategy::out_height()) * roundup(args._Nsize, strategy::out_width()) * sizeof(Tr);
 
         float mac_cycles     = static_cast<float>(total_macs) / params.kernel_macs_cycle;
         float prepare_cycles = static_cast<float>(prepare_bytes) / params.prepare_bytes_cycle;
@@ -1167,26 +1042,11 @@ public:
 
         return static_cast<uint64_t>(total_cycles);
     }
-
-    GemmConfig get_config() override {
-        GemmConfig c;
-
-        c.method = GemmMethod::GEMM_INTERLEAVED;
-        c.inner_block_size = _k_block;
-        c.outer_block_size = _x_block;
-        c.filter = get_type_name<strategy>();
-        c.weight_format = get_weight_format(get_kernel_weight_format<strategy, FixedFormat, To>::get(), sizeof(To));
-
-        return c;
-    }
 };
 
 // Aliases for the variations
 template<typename strategy, typename To, typename Tr, typename OutputStage=Nothing>
 using GemmInterleavedNoMerge = GemmInterleaved<strategy, To, Tr, OutputStage, false>;
-
-template<typename strategy, typename To, typename Tr, typename OutputStage=Nothing>
-using GemmInterleavedFixedFormat = GemmInterleaved<strategy, To, Tr, OutputStage, true, true>;
 
 template<typename strategy, typename To, typename Tr>
 using GemmInterleavedPretransposedNoMergeQuantizedInline = GemmInterleaved<strategy, To, Tr, Requantize32, false>;

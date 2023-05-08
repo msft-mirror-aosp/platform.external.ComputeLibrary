@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Arm Limited.
+ * Copyright (c) 2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -29,14 +29,13 @@
 #include "arm_compute/runtime/NEON/functions/NEArithmeticAddition.h"
 #include "arm_compute/runtime/NEON/functions/NEArithmeticSubtraction.h"
 #include "arm_compute/runtime/NEON/functions/NECopy.h"
-#include "arm_compute/runtime/NEON/functions/NEDequantizationLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEGEMMLowpMatrixMultiplyCore.h"
 #include "arm_compute/runtime/NEON/functions/NEGEMMLowpOutputStage.h"
 #include "arm_compute/runtime/NEON/functions/NEPixelWiseMultiplication.h"
-#include "arm_compute/runtime/NEON/functions/NEQuantizationLayer.h"
 #include "arm_compute/runtime/NEON/functions/NETranspose.h"
-#include "arm_compute/runtime/common/LSTMParams.h"
+#include "support/MemorySupport.h"
 
+#include "arm_compute/runtime/common/LSTMParams.h"
 #include <memory>
 
 namespace arm_compute
@@ -45,25 +44,20 @@ namespace arm_compute
 class ITensor;
 class ITensorInfo;
 class NEQLSTMLayerNormalizationKernel;
-namespace cpu
-{
-namespace kernels
-{
-class CpuGemmLowpMatrixAReductionKernel;
-} // namespace kernels
-} // namespace cpu
+class NEGEMMLowpMatrixAReductionKernel;
+
 /** Basic function to run @ref NEQLSTMLayer
  *
- * This function calls the following kernels:
+ * This function calls the following NEON functions/kernels:
  *
  * -# @ref NEActivationLayer                                     Activation functions (tanh and logistic)
- * -# @ref NEArithmeticAddition                                  Elementwise addition
- * -# @ref NEArithmeticSubtraction                               Elementwise subtraction
- * -# @ref NECopy                                                Copy kernel for copying output_state_out to output
+ * -# @ref NEArithmeticAddition                            Elementwise addition
+ * -# @ref NEArithmeticSubtractionKernel                         Elementwise subtraction
+ * -# @ref NECopyKernel                                          Copy kernel for copying output_state_out to output
  * -# @ref NEGEMMLowpMatrixMultiplyCore                          Quantized matrix multiplication core. Accumulators are 32-bit integers
- * -# @ref NEGEMMLowpOutputStage                                 Convert 32-bit integers into QSYMM16
- * -# @ref cpu::kernels::CpuGemmLowpMatrixAReductionKernel            For precomputing effective biases to use
- * -# @ref NEPixelWiseMultiplication                             Elementwise multiplication
+ * -# @ref NEGEMMLowpQuantizeDownInt32ToInt16ScaleByFixedPoint   Convert 32-bit integers into QSYMM16
+ * -# @ref NEGEMMLowpMatrixAReductionKernel                      For precomputing effective biases to use
+ * -# @ref NEPixelWiseMultiplication                       Elementwise multiplication
  * -# @ref NETranspose                                           Transpose function for reshaping the weights
  * */
 class NEQLSTMLayer : public IFunction
@@ -82,14 +76,6 @@ public:
     /** Default destructor */
     ~NEQLSTMLayer();
     /** Initialize function's tensors.
-     *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src0          |src1 - src6  |src7 -src9   |src10  |src11         |dst0   |dst1 - dst2       |
-     * |:-------------|:------------|:------------|:------|:-------------|:------|:-----------------|
-     * |QASYMM8_SIGNED|QASYMM8      |S32          |QSYMM16|QASYMM8_SIGNED|QSYMM16|QASYMM8_SIGNED    |
      *
      * @param[in]  input                       Source tensor. Input is a 2D tensor with dimensions [input_size, batch_size]. Data types supported: QASYMM8_SIGNED.
      * @param[in]  input_to_forget_weights     2D weights tensor with dimensions [input_size, num_units]. Data type supported: QSYMM8.
@@ -257,73 +243,70 @@ private:
     };
 
     // Functions used
-
-    NEDequantizationLayer                                            _dequantize_input_to_forget_weights;
-    NEQuantizationLayer                                              _quantize_input_to_forget_weights;
-    NETranspose                                                      _transpose_input_to_forget_weights;
-    NETranspose                                                      _transpose_input_to_cell_weights;
-    NETranspose                                                      _transpose_input_to_output_weights;
-    NETranspose                                                      _transpose_input_to_input_weights;
-    NETranspose                                                      _transpose_recurrent_to_forget_weights;
-    NETranspose                                                      _transpose_recurrent_to_cell_weights;
-    NETranspose                                                      _transpose_recurrent_to_output_weights;
-    NETranspose                                                      _transpose_recurrent_to_input_weights;
-    NETranspose                                                      _transpose_projection_weights;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _input_to_input_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _recurrent_to_input_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _input_to_forget_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _recurrent_to_forget_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _input_to_cell_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _recurrent_to_cell_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _input_to_output_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _recurrent_to_output_reduction;
-    std::unique_ptr<cpu::kernels::CpuGemmLowpMatrixAReductionKernel> _projection_reduction;
-    NEArithmeticAddition                                             _projection_bias_add;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_input_to_forget;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_recurrent_to_forget;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_cell_to_forget;
-    NEGEMMLowpOutputStage                                            _input_to_forget_outstage;
-    NEGEMMLowpOutputStage                                            _recurrent_to_forget_outstage;
-    NEGEMMLowpOutputStage                                            _cell_to_forget_outstage;
-    NEArithmeticAddition                                             _accumulate_input_recurrent_forget;
-    NEArithmeticAddition                                             _accumulate_cell_forget;
-    NEActivationLayer                                                _forget_gate_sigmoid;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_input_to_cell;
-    NEGEMMLowpOutputStage                                            _input_to_cell_outstage;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_recurrent_to_cell;
-    NEGEMMLowpOutputStage                                            _recurrent_to_cell_outstage;
-    NEArithmeticAddition                                             _accumulate_input_recurrent_modulation;
-    NEActivationLayer                                                _cell_gate_tanh;
-    NEArithmeticSubtraction                                          _input_gate_sub;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_input_to_input;
-    NEGEMMLowpOutputStage                                            _input_to_input_outstage;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_recurrent_to_input;
-    NEGEMMLowpOutputStage                                            _recurrent_to_input_outstage;
-    NEArithmeticAddition                                             _accumulate_input_recurrent_input;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_cell_to_input;
-    NEGEMMLowpOutputStage                                            _cell_to_input_outstage;
-    NEArithmeticAddition                                             _accumulate_cell_input;
-    NEActivationLayer                                                _input_gate_sigmoid;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_forget_cell;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_input_cell;
-    NEArithmeticAddition                                             _add_forget_cell;
-    NEActivationLayer                                                _cell_clip;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_input_to_output;
-    NEGEMMLowpOutputStage                                            _input_to_output_outstage;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_recurrent_to_output;
-    NEGEMMLowpOutputStage                                            _recurrent_to_output_outstage;
-    NEArithmeticAddition                                             _accumulate_input_recurrent_output;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_cell_to_output;
-    NEGEMMLowpOutputStage                                            _cell_to_output_outstage;
-    NEArithmeticAddition                                             _accumulate_cell_to_output;
-    NEActivationLayer                                                _output_gate_sigmoid;
-    NEActivationLayer                                                _hidden_tanh;
-    NEPixelWiseMultiplication                                        _pixelwise_mul_hidden;
-    NEGEMMLowpOutputStage                                            _hidden_outstage;
-    NEGEMMLowpMatrixMultiplyCore                                     _mm_projection;
-    NEGEMMLowpOutputStage                                            _projection_outstage;
-    NEArithmeticAddition                                             _accumulate_projection;
-    NEActivationLayer                                                _projection_clip;
+    NETranspose                                       _transpose_input_to_forget_weights;
+    NETranspose                                       _transpose_input_to_cell_weights;
+    NETranspose                                       _transpose_input_to_output_weights;
+    NETranspose                                       _transpose_input_to_input_weights;
+    NETranspose                                       _transpose_recurrent_to_forget_weights;
+    NETranspose                                       _transpose_recurrent_to_cell_weights;
+    NETranspose                                       _transpose_recurrent_to_output_weights;
+    NETranspose                                       _transpose_recurrent_to_input_weights;
+    NETranspose                                       _transpose_projection_weights;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _input_to_input_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _recurrent_to_input_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _input_to_forget_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _recurrent_to_forget_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _input_to_cell_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _recurrent_to_cell_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _input_to_output_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _recurrent_to_output_reduction;
+    std::unique_ptr<NEGEMMLowpMatrixAReductionKernel> _projection_reduction;
+    NEArithmeticAddition                              _projection_bias_add;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_input_to_forget;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_recurrent_to_forget;
+    NEPixelWiseMultiplication                         _pixelwise_mul_cell_to_forget;
+    NEGEMMLowpOutputStage                             _input_to_forget_outstage;
+    NEGEMMLowpOutputStage                             _recurrent_to_forget_outstage;
+    NEGEMMLowpOutputStage                             _cell_to_forget_outstage;
+    NEArithmeticAddition                              _accumulate_input_recurrent_forget;
+    NEArithmeticAddition                              _accumulate_cell_forget;
+    NEActivationLayer                                 _forget_gate_sigmoid;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_input_to_cell;
+    NEGEMMLowpOutputStage                             _input_to_cell_outstage;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_recurrent_to_cell;
+    NEGEMMLowpOutputStage                             _recurrent_to_cell_outstage;
+    NEArithmeticAddition                              _accumulate_input_recurrent_modulation;
+    NEActivationLayer                                 _cell_gate_tanh;
+    NEArithmeticSubtraction                           _input_gate_sub;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_input_to_input;
+    NEGEMMLowpOutputStage                             _input_to_input_outstage;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_recurrent_to_input;
+    NEGEMMLowpOutputStage                             _recurrent_to_input_outstage;
+    NEArithmeticAddition                              _accumulate_input_recurrent_input;
+    NEPixelWiseMultiplication                         _pixelwise_mul_cell_to_input;
+    NEGEMMLowpOutputStage                             _cell_to_input_outstage;
+    NEArithmeticAddition                              _accumulate_cell_input;
+    NEActivationLayer                                 _input_gate_sigmoid;
+    NEPixelWiseMultiplication                         _pixelwise_mul_forget_cell;
+    NEPixelWiseMultiplication                         _pixelwise_mul_input_cell;
+    NEArithmeticAddition                              _add_forget_cell;
+    NEActivationLayer                                 _cell_clip;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_input_to_output;
+    NEGEMMLowpOutputStage                             _input_to_output_outstage;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_recurrent_to_output;
+    NEGEMMLowpOutputStage                             _recurrent_to_output_outstage;
+    NEArithmeticAddition                              _accumulate_input_recurrent_output;
+    NEPixelWiseMultiplication                         _pixelwise_mul_cell_to_output;
+    NEGEMMLowpOutputStage                             _cell_to_output_outstage;
+    NEArithmeticAddition                              _accumulate_cell_to_output;
+    NEActivationLayer                                 _output_gate_sigmoid;
+    NEActivationLayer                                 _hidden_tanh;
+    NEPixelWiseMultiplication                         _pixelwise_mul_hidden;
+    NEGEMMLowpOutputStage                             _hidden_outstage;
+    NEGEMMLowpMatrixMultiplyCore                      _mm_projection;
+    NEGEMMLowpOutputStage                             _projection_outstage;
+    NEArithmeticAddition                              _accumulate_projection;
+    NEActivationLayer                                 _projection_clip;
 
     TensorCopyKernel _projection_bias_copy;
     TensorCopyKernel _projection_output_to_accumulate_copy;
@@ -386,9 +369,6 @@ private:
     static Status validate_layer_norm(const ITensorInfo &in, const ITensorInfo &weight, const ITensorInfo &bias);
 
     // Temporary tensors
-    Tensor _input_to_forget_weights_f32{ nullptr };
-    Tensor _input_to_forget_weights_symm8{ nullptr };
-
     Tensor _input_to_forget_weights_transposed{ nullptr };
     Tensor _input_to_cell_weights_transposed{ nullptr };
     Tensor _input_to_output_weights_transposed{ nullptr };
@@ -457,7 +437,6 @@ private:
     bool _has_peephole{ false };
     bool _has_layer_norm{ false };
     bool _projection_tensor_copy_required{ false };
-    bool _convert_input_to_forget_weights_to_qsymm8{ false };
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NEQLSTMLAYER_H */

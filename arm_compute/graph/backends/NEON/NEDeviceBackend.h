@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -34,7 +34,7 @@ namespace graph
 {
 namespace backends
 {
-/** CPU device backend */
+/** NEON device backend */
 class NEDeviceBackend final : public IDeviceBackend
 {
 public:
@@ -52,10 +52,9 @@ public:
     Status validate_node(INode &node) override;
     std::shared_ptr<arm_compute::IMemoryManager> create_memory_manager(MemoryManagerAffinity affinity) override;
     std::shared_ptr<arm_compute::IWeightsManager> create_weights_manager() override;
-    void                                          sync() override;
 
 private:
-    Allocator _allocator; /**< Backend allocator */
+    Allocator _allocator; /**< NEON backend allocator */
 };
 } // namespace backends
 } // namespace graph

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,6 +27,7 @@
 #include "arm_compute/runtime/IAllocator.h"
 #include "arm_compute/runtime/IMemoryPool.h"
 #include "arm_compute/runtime/Types.h"
+#include "support/MemorySupport.h"
 
 #include <vector>
 
@@ -41,6 +42,7 @@ BlobMemoryPool::BlobMemoryPool(IAllocator *allocator, std::vector<BlobInfo> blob
 
 BlobMemoryPool::~BlobMemoryPool()
 {
+    ARM_COMPUTE_ERROR_ON(!_allocator);
     free_blobs();
 }
 
@@ -71,7 +73,7 @@ MappingType BlobMemoryPool::mapping_type() const
 std::unique_ptr<IMemoryPool> BlobMemoryPool::duplicate()
 {
     ARM_COMPUTE_ERROR_ON(!_allocator);
-    return std::make_unique<BlobMemoryPool>(_allocator, _blob_info);
+    return support::cpp14::make_unique<BlobMemoryPool>(_allocator, _blob_info);
 }
 
 void BlobMemoryPool::allocate_blobs(const std::vector<BlobInfo> &blob_info)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,56 +23,24 @@
  */
 #include "arm_compute/runtime/CL/functions/CLFill.h"
 
-#include "arm_compute/core/CL/CLKernelLibrary.h"
-#include "arm_compute/core/CL/ICLTensor.h"
 #include "arm_compute/core/Types.h"
-#include "arm_compute/core/Validate.h"
-#include "src/core/CL/ICLKernel.h"
-#include "src/gpu/cl/operators/ClFill.h"
+#include "src/core/CL/kernels/CLMemsetKernel.h"
+
+#include "support/MemorySupport.h"
 
 #include <utility>
 
 namespace arm_compute
 {
-struct CLFill::Impl
+void CLFill::configure(ICLTensor *tensor, PixelValue constant_value)
 {
-    const ICLTensor                *src{ nullptr };
-    ICLTensor                      *dst{ nullptr };
-    std::unique_ptr<opencl::ClFill> op{ nullptr };
-};
-
-CLFill::CLFill()
-    : _impl(std::make_unique<Impl>())
-{
-}
-CLFill::CLFill(CLFill &&) = default;
-CLFill &CLFill::operator=(CLFill &&) = default;
-CLFill::~CLFill()                    = default;
-
-void CLFill::configure(ICLTensor *tensor, const PixelValue &constant_value, Window *dst_window)
-{
-    configure(CLKernelLibrary::get().get_compile_context(), tensor, constant_value, dst_window);
+    configure(CLKernelLibrary::get().get_compile_context(), tensor, constant_value);
 }
 
-void CLFill::configure(const CLCompileContext &compile_context, ICLTensor *tensor, const PixelValue &constant_value, Window *dst_window)
+void CLFill::configure(const CLCompileContext &compile_context, ICLTensor *tensor, PixelValue constant_value)
 {
-    ARM_COMPUTE_ERROR_ON_NULLPTR(tensor);
-
-    _impl->src = tensor;
-
-    _impl->op = std::make_unique<opencl::ClFill>();
-    _impl->op->configure(compile_context, _impl->src->info(), constant_value, dst_window);
-}
-
-Status CLFill::validate(const ITensorInfo *tensor, const PixelValue &constant_value, Window *dst_window)
-{
-    return opencl::ClFill::validate(tensor, constant_value, dst_window);
-}
-
-void CLFill::run()
-{
-    ITensorPack pack;
-    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
-    _impl->op->run(pack);
+    auto k = arm_compute::support::cpp14::make_unique<CLMemsetKernel>();
+    k->configure(compile_context, tensor, constant_value);
+    _kernel = std::move(k);
 }
 } // namespace arm_compute

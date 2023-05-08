@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -37,10 +37,10 @@ namespace arm_compute
 // Forward declarations
 class ITensor;
 
-/** Basic function to simulate a convolution layer. This function calls one of the following functions:
- * -# @ref cpu::CpuGemm     (executed only in case GEMM is required for the operation)
- * -# @ref cpu::CpuWinogradConv2d (executed only in case Winograd is required for the operation)
- * -# @ref cpu::CpuDirectConv2d   (executed only in case Direct Convolution is required for the operation)
+/** Basic function to simulate a convolution layer. This function calls one of the following NEON functions:
+ * -# @ref NEGEMMConvolutionLayer     (executed only in case GEMM is required for the operation)
+ * -# @ref NEWinogradConvolutionLayer (executed only in case Winograd is required for the operation)
+ * -# @ref NEDirectConvolutionLayer   (executed only in case Direct Convolution is required for the operation)
  * -# @ref NEFFTConvolutionLayer      (executed only in case FFT is required for the operation)
  *
  *
@@ -78,40 +78,25 @@ public:
     NEConvolutionLayer(const NEConvolutionLayer &) = delete;
     /** Prevent instances of this class from being copied (As this class contains pointers) */
     NEConvolutionLayer &operator=(const NEConvolutionLayer &) = delete;
-    /** Default move constructor */
-    NEConvolutionLayer(NEConvolutionLayer &&) = default;
     /** Prevent instances of this class from being moved (As this class contains non movable objects) */
-    NEConvolutionLayer &operator=(NEConvolutionLayer &&) = default;
+    NEConvolutionLayer(NEConvolutionLayer &&) = delete;
+    /** Prevent instances of this class from being moved (As this class contains non movable objects) */
+    NEConvolutionLayer &operator=(NEConvolutionLayer &&) = delete;
     /** Default destructor */
-    ~NEConvolutionLayer();
+    ~NEConvolutionLayer() = default;
     /** Set the input and output tensors.
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src0           |src1               |src2   |dst            |
-     * |:--------------|:------------------|:------|:--------------|
-     * |F16            |F16                |F16    |F16            |
-     * |F32            |F32                |F32    |F32            |
-     * |QASYMM8        |QASYMM8            |S32    |QASYMM8        |
-     * |QASYMM8        |QSYMM8_PER_CHANNEL |S32    |QASYMM8        |
-     * |QASYMM8_SIGNED |QASYMM8_SIGNED     |S32    |QASYMM8_SIGNED |
-     * |QASYMM8_SIGNED |QSYMM8_PER_CHANNEL |S32    |QASYMM8_SIGNED |
      *
      * @param[in]  input            Source tensor. 3 lower dimensions represent a single input [width, height, IFM],
      *                              while every optional dimension from 4 and above represent a batch of inputs.
      *                              Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
-     * @param[in]  weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM].
-     *                              Data type supported: Same as @p input, also could be QSYMM8_PER_CHANNEL if input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in]  weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM]. Data type supported: Same as @p input.
      * @param[in]  biases           Biases tensor. Shared biases supported. Biases are 1D tensor with dimensions [OFM].
-     *                              Data type supported: Same as @p input, except for input of QASYMM8/QASYMM8_SIGNED type where biases should be of S32 type.
+     *                              Data type supported: Should match @p input data type, except for input of QASYMM8/QASYMM8_SIGNED type where biases should be of S32 type.
      * @param[out] output           Destination tensor. 3 lower dimensions represent a single output [width, height, OFM], while the rest represent batch of outputs.
      *                              Data types supported: Same as @p input.
      * @param[in]  conv_info        Contains padding and stride information described in @ref PadStrideInfo.
      * @param[in]  weights_info     Specifies if the weights tensor has been reshaped with NEWeightsReshapeKernel. If this is not part of the fully connected layer the weights
-     *                              tensor has also been transposed with cpu::kernels::CpuGemmTranspose1xWKernel. Data type supported: Same as @p input.
+     *                              tensor has also been transposed with NEGEMMTranspose1xWKernel. Data type supported: Same as @p input.
      * @param[in]  dilation         (Optional) Dilation, in elements, across x and y. Defaults to (1, 1).
      * @param[in]  act_info         (Optional) Activation layer information in case of a fused activation. Only RELU, BOUNDED_RELU and LU_BOUNDED_RELU supported.
      * @param[in]  enable_fast_math (Optional) Enable fast math computation. In case this flag were set, the function could dispatch the fastest implementation
@@ -125,15 +110,14 @@ public:
      * @param[in] input            Source tensor. 3 lower dimensions represent a single input [width, height, IFM],
      *                             while every optional dimension from 4 and above represent a batch of inputs.
      *                             Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
-     * @param[in] weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM].
-     *                             Data type supported:Same as @p input, also could be QSYMM8_PER_CHANNEL if input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in] weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM]. Data type supported:Same as @p input.
      * @param[in] biases           Biases tensor. Shared biases supported. Biases are 1D tensor with dimensions [OFM].
-     *                             Data type supported: Same as @p input, except for input of QASYMM8/QASYMM8_SIGNED type where biases should be of S32 type.
+     *                             Data type supported: Should match @p input data type, except for input of QASYMM8/QASYMM8_SIGNED type where biases should be of S32 type.
      * @param[in] output           Destination tensor. 3 lower dimensions represent a single output [width, height, OFM], while the rest represent batch of outputs.
      *                             Data types supported: Same as @p input.
      * @param[in] conv_info        Contains padding and stride information described in @ref PadStrideInfo.
      * @param[in] weights_info     Specifies if the weights tensor has been reshaped with NEWeightsReshapeKernel. If this is not part of the fully connected layer the weights
-     *                             tensor has also been transposed with cpu::kernels::CpuGemmTranspose1xWKernel. Data type supported: Same as @p input.
+     *                             tensor has also been transposed with NEGEMMTranspose1xWKernel. Data type supported: Same as @p input.
      * @param[in] dilation         (Optional) Dilation, in elements, across x and y. Defaults to (1, 1).
      * @param[in] act_info         (Optional) Activation layer information in case of a fused activation.
      * @param[in] enable_fast_math (Optional) Enable fast math computation. In case this flag were set, the function could dispatch the fastest implementation
@@ -150,13 +134,12 @@ public:
      * @param[in] input            Source tensor. 3 lower dimensions represent a single input [width, height, IFM],
      *                             while every optional dimension from 4 and above represent a batch of inputs.
      *                             Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
-     * @param[in] weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM].
-     *                             Data type supported:Same as @p input, also could be QSYMM8_PER_CHANNEL if input is QASYMM8/QASYMM8_SIGNED.
+     * @param[in] weights          Weights tensor. Weights are 4D tensor with dimensions [kernel_x, kernel_y, IFM, OFM]. Data type supported:Same as @p input.
      * @param[in] output           Destination tensor. 3 lower dimensions represent a single output [width, height, OFM], while the rest represent batch of outputs.
      *                             Data types supported: Same as @p input.
      * @param[in] conv_info        Contains padding and stride information described in @ref PadStrideInfo.
      * @param[in] weights_info     Specifies if the weights tensor has been reshaped with NEWeightsReshapeKernel. If this is not part of the fully connected layer the weights
-     *                             tensor has also been transposed with cpu::kernels::CpuGemmTranspose1xWKernel. Data type supported: Same as @p input.
+     *                             tensor has also been transposed with NEGEMMTranspose1xWKernel. Data type supported: Same as @p input.
      * @param[in] dilation         (Optional) Dilation, in elements, across x and y. Defaults to (1, 1).
      * @param[in] act_info         (Optional) Activation layer information in case of a fused activation.
      * @param[in] enable_fast_math (Optional) Enable fast math computation. In case this flag were set, the function could dispatch the fastest implementation
@@ -171,8 +154,8 @@ public:
     void prepare() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::shared_ptr<IMemoryManager> _memory_manager;
+    std::unique_ptr<IFunction>      _function; /**< Function to run */
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NECONVOLUTIONLAYER_H */

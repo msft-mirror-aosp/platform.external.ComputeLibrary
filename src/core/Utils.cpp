@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Arm Limited.
+ * Copyright (c) 2016-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -177,13 +177,36 @@ const std::string &string_from_activation_func(ActivationLayerInfo::ActivationFu
         { ActivationLayerInfo::ActivationFunction::SQUARE, "SQUARE" },
         { ActivationLayerInfo::ActivationFunction::TANH, "TANH" },
         { ActivationLayerInfo::ActivationFunction::IDENTITY, "IDENTITY" },
-        { ActivationLayerInfo::ActivationFunction::HARD_SWISH, "HARD_SWISH" },
-        { ActivationLayerInfo::ActivationFunction::SWISH, "SWISH" },
-        { ActivationLayerInfo::ActivationFunction::GELU, "GELU" }
+        { ActivationLayerInfo::ActivationFunction::HARD_SWISH, "HARD_SWISH" }
 
     };
 
     return act_map[act];
+}
+
+const std::string &string_from_matrix_pattern(MatrixPattern pattern)
+{
+    static std::map<MatrixPattern, const std::string> pattern_map =
+    {
+        { MatrixPattern::BOX, "BOX" },
+        { MatrixPattern::CROSS, "CROSS" },
+        { MatrixPattern::DISK, "DISK" },
+        { MatrixPattern::OTHER, "OTHER" },
+    };
+
+    return pattern_map[pattern];
+}
+
+const std::string &string_from_non_linear_filter_function(NonLinearFilterFunction function)
+{
+    static std::map<NonLinearFilterFunction, const std::string> func_map =
+    {
+        { NonLinearFilterFunction::MAX, "MAX" },
+        { NonLinearFilterFunction::MEDIAN, "MEDIAN" },
+        { NonLinearFilterFunction::MIN, "MIN" },
+    };
+
+    return func_map[function];
 }
 
 const std::string &string_from_interpolation_policy(InterpolationPolicy policy)
@@ -232,31 +255,6 @@ const std::string &string_from_pooling_type(PoolingType type)
     };
 
     return pool_type_map[type];
-}
-
-bool is_pool_region_entirely_outside_input(const PoolingLayerInfo &info)
-{
-    if(info.is_global_pooling || info.exclude_padding || info.pool_size.x() == 0 || info.pool_size.y() == 0)
-    {
-        return false;
-    }
-    const auto ps                = info.pad_stride_info;
-    const auto pool_le_padding_x = info.pool_size.x() <= std::max({ ps.pad_left(), ps.pad_right() });
-    const auto pool_le_padding_y = info.pool_size.y() <= std::max({ ps.pad_top(), ps.pad_bottom() });
-    return pool_le_padding_x || pool_le_padding_y;
-}
-
-bool is_pool_3d_region_entirely_outside_input(const Pooling3dLayerInfo &info)
-{
-    if(info.is_global_pooling || info.pool_size.x() == 0 || info.pool_size.y() == 0 || info.pool_size.z() == 0)
-    {
-        return false;
-    }
-    const auto ps                = info.padding;
-    const auto pool_le_padding_x = info.pool_size.x() <= std::max({ ps.left, ps.right });
-    const auto pool_le_padding_y = info.pool_size.y() <= std::max({ ps.top, ps.bottom });
-    const auto pool_le_padding_z = info.pool_size.z() <= std::max({ ps.front, ps.back });
-    return pool_le_padding_x || pool_le_padding_y || pool_le_padding_z;
 }
 
 const std::string &string_from_gemmlowp_output_stage(GEMMLowpOutputStageType output_stage)
@@ -332,7 +330,6 @@ DataType data_type_from_name(const std::string &name)
         { "f16", DataType::F16 },
         { "f32", DataType::F32 },
         { "qasymm8", DataType::QASYMM8 },
-        { "qasymm8_signed", DataType::QASYMM8_SIGNED },
     };
 
 #ifndef ARM_COMPUTE_EXCEPTIONS_DISABLED
@@ -354,13 +351,6 @@ std::string lower_string(const std::string &val)
 {
     std::string res = val;
     std::transform(res.begin(), res.end(), res.begin(), ::tolower);
-    return res;
-}
-
-std::string upper_string(const std::string &val)
-{
-    std::string res = val;
-    std::transform(res.begin(), res.end(), res.begin(), ::toupper);
     return res;
 }
 
@@ -458,71 +448,6 @@ std::pair<unsigned int, unsigned int> scaled_dimensions(int width, int height,
     w = std::max(1, w);
     h = std::max(1, h);
     return std::make_pair(static_cast<unsigned int>(w), static_cast<unsigned int>(h));
-}
-
-std::pair<int, int> scaled_dimensions_signed(int width, int height,
-                                             int kernel_width, int kernel_height,
-                                             const PadStrideInfo &pad_stride_info)
-{
-    const int pad_left   = pad_stride_info.pad_left();
-    const int pad_top    = pad_stride_info.pad_top();
-    const int pad_right  = pad_stride_info.pad_right();
-    const int pad_bottom = pad_stride_info.pad_bottom();
-    const int stride_x   = pad_stride_info.stride().first;
-    const int stride_y   = pad_stride_info.stride().second;
-    int       w          = 0;
-    int       h          = 0;
-    switch(pad_stride_info.round())
-    {
-        case DimensionRoundingType::FLOOR:
-            w = static_cast<int>(std::floor((static_cast<float>(width + pad_left + pad_right - kernel_width) / stride_x) + 1));
-            h = static_cast<int>(std::floor((static_cast<float>(height + pad_top + pad_bottom - kernel_height) / stride_y) + 1));
-            break;
-        case DimensionRoundingType::CEIL:
-            w = static_cast<int>(std::ceil((static_cast<float>(width + pad_left + pad_right - kernel_width) / stride_x) + 1));
-            h = static_cast<int>(std::ceil((static_cast<float>(height + pad_top + pad_bottom - kernel_height) / stride_y) + 1));
-            break;
-        default:
-            ARM_COMPUTE_ERROR("Unsupported rounding type");
-    }
-
-    return std::make_pair(static_cast<int>(w), static_cast<int>(h));
-}
-
-std::tuple<int, int, int> scaled_3d_dimensions_signed(int width, int height, int depth,
-                                                      int kernel_width, int kernel_height, int kernel_depth,
-                                                      const Pooling3dLayerInfo &pool3d_info)
-{
-    const int pad_left   = pool3d_info.padding.left;
-    const int pad_top    = pool3d_info.padding.top;
-    const int pad_right  = pool3d_info.padding.right;
-    const int pad_bottom = pool3d_info.padding.bottom;
-    const int pad_front  = pool3d_info.padding.front;
-    const int pad_back   = pool3d_info.padding.back;
-    const int stride_x   = pool3d_info.stride.x();
-    const int stride_y   = pool3d_info.stride.y();
-    const int stride_z   = pool3d_info.stride.z();
-    int       w          = 0;
-    int       h          = 0;
-    int       d          = 0;
-
-    switch(pool3d_info.round_type)
-    {
-        case DimensionRoundingType::FLOOR:
-            w = static_cast<int>(std::floor((static_cast<float>(width + pad_left + pad_right - kernel_width) / stride_x) + 1));
-            h = static_cast<int>(std::floor((static_cast<float>(height + pad_top + pad_bottom - kernel_height) / stride_y) + 1));
-            d = static_cast<int>(std::floor((static_cast<float>(depth + pad_front + pad_back - kernel_depth) / stride_z) + 1));
-            break;
-        case DimensionRoundingType::CEIL:
-            w = static_cast<int>(std::ceil((static_cast<float>(width + pad_left + pad_right - kernel_width) / stride_x) + 1));
-            h = static_cast<int>(std::ceil((static_cast<float>(height + pad_top + pad_bottom - kernel_height) / stride_y) + 1));
-            d = static_cast<int>(std::ceil((static_cast<float>(depth + pad_front + pad_back - kernel_depth) / stride_z) + 1));
-            break;
-        default:
-            ARM_COMPUTE_ERROR("Unsupported rounding type");
-    }
-
-    return std::make_tuple(static_cast<int>(w), static_cast<int>(h), static_cast<int>(d));
 }
 
 bool needs_serialized_reduction(ReductionOperation op, DataType dt, unsigned int axis)

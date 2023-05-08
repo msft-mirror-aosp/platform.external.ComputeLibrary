@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,30 +22,28 @@
  * IN THE SOFTWARE.
  */
 #pragma once
-
 #ifdef __aarch64__
+
 #include "../std_transforms_fixed.hpp"
-#include "../performance_parameters.hpp"
 
 #define ARGLIST  \
-    unsigned int, const unsigned int *, \
-    IndirectInputArg<int8_t>, \
-    size_t, size_t, \
-    const int8_t *, \
-    IndirectOutputArg<int32_t>, \
-    const int32_t *, Activation, bool
+   unsigned int, const unsigned int *, \
+   IndirectInputArg<int8_t>, \
+   size_t, size_t, \
+   const int8_t *, \
+   IndirectOutputArg<int32_t>, \
+   const int32_t *, Activation, bool
 
 namespace arm_gemm
 {
+
 // Actual kernel implementations
 void a64_hybrid_s8s32_dot_6x16( ARGLIST );
-void a64_hybrid_s8s32_dot_6x16_a55( ARGLIST );
 
 class cls_a64_hybrid_s8s32_dot_6x16
 {
 public:
-    typedef int8_t lhs_operand_type;
-    typedef int8_t rhs_operand_type;
+    typedef int8_t operand_type;
     typedef int32_t result_type;
 
     typedef void (*kern_type)( ARGLIST );
@@ -71,55 +69,17 @@ public:
         return true;
     }
 
-    StdTransformsFixed<rhs_operand_type, result_type, 6, 16, 4> transforms = {};
-    template<typename T>
-    static inline PerformanceParameters get_performance_parameters(const CPUInfo *ci)
-    {
-        if (std::is_same<T, int32_t>::value) {
-            switch (ci->get_cpu_model()) {
-                default:
-                    return { 31.65 };
-                case CPUModel::A55r1:
-                    return { 9.217 };
-                case CPUModel::A510:
-                    return { 15.87 };
-                case CPUModel::V1:
-                    return { 54.50 };
-            }
-        }
-
-        if (std::is_same<T, int8_t>::value) {
-            switch (ci->get_cpu_model()) {
-                case CPUModel::A55r1:
-                    return { 9.5238, 2.0799, 0.2279 };
-                default:
-                    return { 29.6736, 11.4025, 0.5591 };
-                case CPUModel::A510:
-                    return { 16.66, 3.92, 0.48 };
-                case CPUModel::V1:
-                    return { 55.40, 19.21, 0.93 };
-            }
-        }
-
-        return { 1.0 };
-    }
+    StdTransformsFixed<operand_type, result_type, 6, 16, 4> transforms = {};
 
     // Default to the generic kernel
     kern_type kernel=a64_hybrid_s8s32_dot_6x16;
-    cls_a64_hybrid_s8s32_dot_6x16(const CPUInfo *ci)
+
+    cls_a64_hybrid_s8s32_dot_6x16(const CPUInfo *)
     {
-        switch(ci->get_cpu_model()) {
-            default:
-                break;
-            case CPUModel::A55r1:
-                kernel=a64_hybrid_s8s32_dot_6x16_a55;
-                break;
-        }
     }
 };
 
 } // namespace arm_gemm
 
 #undef ARGLIST
-
 #endif // __aarch64__

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,6 +23,8 @@
  */
 #ifndef ARM_COMPUTE_TEST_INSTRUMENT
 #define ARM_COMPUTE_TEST_INSTRUMENT
+
+#include "support/MemorySupport.h"
 
 #include "../Utils.h"
 #include "Measurement.h"
@@ -117,15 +119,6 @@ public:
         return MeasurementsMap();
     }
 
-    /** Return JSON formatted instrument header string.
-     *
-     * @return JSON formatted string
-     */
-    virtual std::string instrument_header() const
-    {
-        return std::string{};
-    }
-
     /** Return the latest test measurements.
      *
      * @return the latest test measurements.
@@ -142,7 +135,7 @@ protected:
 template <typename T, ScaleFactor scale>
 inline std::unique_ptr<Instrument> Instrument::make_instrument()
 {
-    return std::make_unique<T>(scale);
+    return support::cpp14::make_unique<T>(scale);
 }
 
 } // namespace framework

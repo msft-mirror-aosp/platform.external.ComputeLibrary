@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -94,18 +94,6 @@ public:
 
     void set_pretransposed_B_data(void *buffer) override {
         _subgemm->set_pretransposed_B_data(buffer);
-    }
-
-    GemmConfig get_config() override {
-        GemmConfig c = _subgemm->get_config();
-
-        std::string new_filter = "gemv_batched[";
-        new_filter.append(c.filter);
-        new_filter.append("]");
-
-        c.filter = new_filter;
-
-        return c;
     }
 };
 

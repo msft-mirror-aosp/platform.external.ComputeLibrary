@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,7 +41,7 @@ public:
      * @param[in] starts The starts of the dimensions of the input tensor to be sliced. The length must be of rank(input).
      * @param[in] ends   The ends of the dimensions of the input tensor to be sliced. The length must be of rank(input).
      */
-    SliceLayerNode(const Coordinates &starts, const Coordinates &ends);
+    SliceLayerNode(Coordinates &starts, Coordinates &ends);
     /** Computes slice layer output descriptor
      *
      * @param[in] input_descriptor Descriptor of the input tensor

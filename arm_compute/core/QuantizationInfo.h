@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,10 +24,9 @@
 #ifndef ARM_COMPUTE_QUANTIZATION_INFO_H
 #define ARM_COMPUTE_QUANTIZATION_INFO_H
 
-#include "arm_compute/core/Error.h"
 #include "arm_compute/core/Rounding.h"
-#include "support/ToolchainSupport.h"
 #include "utils/misc/Utility.h"
+#include "arm_compute/core/Error.h"
 
 #include <cstddef>
 #include <type_traits>
@@ -217,33 +216,14 @@ struct Qasymm8QuantizationHelper
 
     /** Quantize a value given a 8-bit asymmetric quantization scheme
      *
-     * @param[in] value Value to quantize
-     * @param[in] qinfo Quantization information to use for quantizing
-     *
-     * @return Quantized value
-     */
-    static inline QUANTIZED_TYPE quantize(float value, const UniformQuantizationInfo &qinfo)
-    {
-        ARM_COMPUTE_ERROR_ON(qinfo.scale == 0);
-        const int quantized = support::cpp11::lround(value / qinfo.scale) + qinfo.offset;
-        return static_cast<QUANTIZED_TYPE>(arm_compute::utility::clamp<decltype(quantized), QUANTIZED_TYPE>(quantized));
-    }
-
-    /** Quantize a value given a 8-bit asymmetric quantization scheme using a specific rounding policy
-     *
      * @param[in] value           Value to quantize
      * @param[in] qinfo           Quantization information to use for quantizing
-     * @param[in] rounding_policy Rounding policy to use
+     * @param[in] rounding_policy (Optional) Rounding policy to use. Default: nearest up
      *
      * @return Quantized value
      */
-    static inline QUANTIZED_TYPE quantize(float value, const UniformQuantizationInfo &qinfo, RoundingPolicy rounding_policy)
+    static inline QUANTIZED_TYPE quantize(float value, const UniformQuantizationInfo &qinfo, RoundingPolicy rounding_policy = RoundingPolicy::TO_NEAREST_UP)
     {
-        if(rounding_policy == RoundingPolicy::TO_NEAREST_UP)
-        {
-            return quantize(value, qinfo);
-        }
-
         ARM_COMPUTE_ERROR_ON(qinfo.scale == 0);
         const int quantized = arm_compute::round(value / qinfo.scale, rounding_policy) + qinfo.offset;
         return static_cast<QUANTIZED_TYPE>(arm_compute::utility::clamp<decltype(quantized), QUANTIZED_TYPE>(quantized));
@@ -397,57 +377,6 @@ inline float dequantize(uint8_t value, float scale, int32_t offset)
 inline float dequantize_qsymm8(int8_t value, const UniformQuantizationInfo &qinfo)
 {
     return value * qinfo.scale;
-}
-
-inline qasymm8_t qasymm8_hard_swish(qasymm8_t                      in,
-                                    const UniformQuantizationInfo &qi_in,
-                                    const UniformQuantizationInfo &qi_out)
-{
-    float tmp_f         = dequantize_qasymm8(in, qi_in);
-    tmp_f               = tmp_f * ((std::min(std::max((tmp_f + 3), 0.0f), 6.0f)) * 0.166666667f);
-    const qasymm8_t tmp = quantize_qasymm8(tmp_f, qi_out);
-    return tmp;
-}
-
-inline qasymm8_signed_t qasymm8_signed_hard_swish(qasymm8_signed_t               in,
-                                                  const UniformQuantizationInfo &qi_in,
-                                                  const UniformQuantizationInfo &qi_out)
-{
-    float tmp_f         = dequantize_qasymm8_signed(in, qi_in);
-    tmp_f               = tmp_f * ((std::min(std::max((tmp_f + 3), 0.0f), 6.0f)) * 0.166666667f);
-    const qasymm8_t tmp = quantize_qasymm8_signed(tmp_f, qi_out);
-    return tmp;
-}
-
-inline qasymm8_t qasymm8_leaky_relu(qasymm8_t                      in,
-                                    const UniformQuantizationInfo &qi_in,
-                                    const UniformQuantizationInfo &qi_out,
-                                    float                          alpha)
-{
-    float tmp_f         = dequantize_qasymm8(in, qi_in);
-    tmp_f               = tmp_f > 0 ? tmp_f : tmp_f * alpha;
-    const qasymm8_t tmp = quantize_qasymm8(tmp_f, qi_out);
-    return tmp;
-}
-
-inline qasymm8_t qasymm8_logistic(qasymm8_t                      in,
-                                  const UniformQuantizationInfo &qi_in,
-                                  const UniformQuantizationInfo &qi_out)
-{
-    float tmp_f         = dequantize_qasymm8(in, qi_in);
-    tmp_f               = 1.f / (1.f + std::exp(-tmp_f));
-    const qasymm8_t tmp = quantize_qasymm8(tmp_f, qi_out);
-    return tmp;
-}
-
-inline qasymm8_signed_t qasymm8_signed_logistic(qasymm8_signed_t               in,
-                                                const UniformQuantizationInfo &qi_in,
-                                                const UniformQuantizationInfo &qi_out)
-{
-    float tmp_f                = dequantize_qasymm8_signed(in, qi_in);
-    tmp_f                      = 1.f / (1.f + std::exp(-tmp_f));
-    const qasymm8_signed_t tmp = quantize_qasymm8_signed(tmp_f, qi_out);
-    return tmp;
 }
 
 /** Dequantize a value given a 8-bit symmetric quantization scheme

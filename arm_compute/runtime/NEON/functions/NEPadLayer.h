@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,7 +26,6 @@
 
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/NEON/functions/NEConcatenateLayer.h"
-#include "arm_compute/runtime/NEON/functions/NECopy.h"
 #include "arm_compute/runtime/NEON/functions/NEStridedSlice.h"
 #include "arm_compute/runtime/SubTensor.h"
 
@@ -36,14 +35,15 @@
 
 namespace arm_compute
 {
+class NECopyKernel;
 class NEPadLayerKernel;
 
-/** Basic function to pad a tensor. This function calls the following functions/kernels:
+/** Basic function to pad a tensor. This function calls the following NEON functions/kernels:
  *
  *  - For padding mode = PaddingMode::CONSTANT:
  *      -# @ref NEPadLayerKernel
  *  - Otherwise:
- *      -# @ref NECopy
+ *      -# @ref NECopyKernel
  *      -# @ref NEStridedSlice
  *      -# @ref NEConcatenateLayer
  *
@@ -64,15 +64,6 @@ public:
     /** Default destructor */
     ~NEPadLayer();
     /** Initialize the function
-     *
-     * Valid data layouts:
-     * - NHWC
-     * - NCHW
-     *
-     * Valid data type configurations:
-     * |src      |dst       |
-     * |:--------|:---------|
-     * |All      |All       |
      *
      * @param[in]  input          Source tensor. Data types supported: All.
      * @param[out] output         Output tensor. Data type supported: same as @p input
@@ -118,7 +109,7 @@ private:
     void configure_reflect_symmetric_mode(ITensor *input, ITensor *output);
 
 private:
-    NECopy                            _copy_function;
+    std::unique_ptr<NECopyKernel>     _copy_kernel;
     std::unique_ptr<NEPadLayerKernel> _pad_kernel;
     PaddingMode                       _mode;
     PaddingList                       _padding;
