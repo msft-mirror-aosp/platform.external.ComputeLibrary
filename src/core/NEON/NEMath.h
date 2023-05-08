@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -93,6 +93,14 @@ float32x4_t vtaylor_polyq_f32(float32x4_t x, const std::array<float32x4_t, 8> &c
  * @return The calculated exponent.
  */
 float32x4_t vexpq_f32(float32x4_t x);
+
+/** Calculate error function
+ *
+ * @param[in] x Input vector in F32 format.
+ *
+ * @return The calculated erf.
+ */
+float32x4_t verfq_f32(float32x4_t x);
 
 /** Calculate logarithm
  *
@@ -205,6 +213,24 @@ void convert_float32x4x4_to_uint8x16(const float32x4x4_t &in, uint8x16_t &out);
  */
 void convert_float32x4x4_to_int8x16(const float32x4x4_t &in, int8x16_t &out);
 
+/** Converts from float vector to integer vector
+ *
+ * @param[in] in Float vector to converted
+ *
+ * @return The converted integer vector
+ */
+template <typename float_vec_type, typename int_vec_type>
+int_vec_type convert_float_to_int(const float_vec_type &in);
+
+/** Converts from integer vector to float vector
+ *
+ * @param[in] in Integer vector to converted
+ *
+ * @return The converted float vector
+ */
+template <typename float_vec_type, typename int_vec_type>
+float_vec_type convert_int_to_float(const int_vec_type &in);
+
 /** Calculate sine.
  *
  * @param[in] val Input vector value in radians, F32 format.
@@ -220,6 +246,14 @@ float32x4_t vsinq_f32(float32x4_t val);
  * @return The calculated sine.
  */
 float32x2_t vsin_f32(float32x2_t val);
+
+/** Reduce a vector to be a scalar by accumulating all lanes in the vector
+ *
+ * @param[in] v Vector to be reduced.
+ *
+ * @return the wrapped-around number.
+ */
+float vreduce(const float32x4_t &v);
 
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 /** Calculate hyperbolic tangent.
@@ -282,6 +316,14 @@ float16x8_t vinvsqrtq_f16(float16x8_t x);
  */
 float16x8_t vexpq_f16(float16x8_t x);
 
+/** Calculate error function
+ *
+ * @param[in] x Input vector in F16 format.
+ *
+ * @return The calculated erf.
+ */
+float16x8_t verfq_f16(float16x8_t x);
+
 /** Calculate n power of a number.
  *
  * pow(x,n) = e^(n*log(x))
@@ -301,6 +343,13 @@ float16x8_t vpowq_f16(float16x8_t val, float16x8_t n);
  */
 float16x8_t vsinq_f16(float16x8_t val);
 
+/** Reduce a vector to be a scalar by accumulating all lanes in the vector
+ *
+ * @param[in] v Vector to be reduced.
+ *
+ * @return the wrapped-around number.
+ */
+float16_t vreduce(const float16x8_t &v);
 #endif /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
 } // namespace arm_compute
 #include "src/core/NEON/NEMath.inl"

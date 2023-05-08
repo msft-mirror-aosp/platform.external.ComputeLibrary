@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -66,6 +66,7 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output, i
 CLSpaceToDepthLayerKernel::CLSpaceToDepthLayerKernel()
     : _input(nullptr), _output(nullptr), _block_shape()
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLSpaceToDepthLayerKernel::configure(const ICLTensor *input, ICLTensor *output, int32_t block_shape)
@@ -76,6 +77,7 @@ void CLSpaceToDepthLayerKernel::configure(const ICLTensor *input, ICLTensor *out
 void CLSpaceToDepthLayerKernel::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output, int32_t block_shape)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
+    auto padding_info = get_padding_info({ input, output });
 
     TensorShape output_shape = compute_space_to_depth_shape(input->info(), block_shape);
     auto_init_if_empty(*output->info(), output_shape, 1, input->info()->data_type());
@@ -100,6 +102,7 @@ void CLSpaceToDepthLayerKernel::configure(const CLCompileContext &compile_contex
     // Configure kernel window
     Window win = calculate_max_window(*output->info(), Steps());
     ICLKernel::configure_internal(win);
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLSpaceToDepthLayerKernel::validate(const ITensorInfo *input, const ITensorInfo *output, int32_t block_shape)

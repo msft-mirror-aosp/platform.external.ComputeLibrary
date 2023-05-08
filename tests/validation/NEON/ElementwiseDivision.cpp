@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -43,6 +43,8 @@ namespace validation
 namespace
 {
 RelativeTolerance<float> tolerance_fp32(0.000001f);
+AbsoluteTolerance<int>   tolerance_zero_s32(1); // Tolerance for S32 division
+
 /** Input data sets **/
 const auto ElementwiseDivisionS32Dataset = combine(combine(framework::dataset::make("DataType", DataType::S32),
                                                            framework::dataset::make("DataType", DataType::S32)),
@@ -54,6 +56,8 @@ const auto              ElementwiseDivisionFP16Dataset = combine(combine(framewo
 #endif /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
 const auto ElementwiseDivisionFP32Dataset = combine(combine(framework::dataset::make("DataType", DataType::F32), framework::dataset::make("DataType", DataType::F32)),
                                                     framework::dataset::make("DataType", DataType::F32));
+const auto InPlaceDataSet    = framework::dataset::make("InPlace", { false, true });
+const auto OutOfPlaceDataSet = framework::dataset::make("InPlace", { false });
 } // namespace
 
 TEST_SUITE(NEON)
@@ -91,10 +95,41 @@ DATA_TEST_CASE(Validate, framework::DatasetMode::ALL, zip(zip(zip(
 // clang-format on
 // *INDENT-ON*
 
+// Test test cases will execute the function with dynamic-stated shapes
+// Since other elementwise operations share the same kernel, this tests are added only here.
+// Also, only FP32 is tested since data type doesn't/shouldn't matter with dynamic shapes.
+TEST_SUITE(DynamicShape)
+template <typename T>
+using CpuElementwiseDivisionDynamicShapeFixture = ArithmeticDivisionDynamicShapeValidationFixture<Tensor, Accessor, NEElementwiseDivision, T>;
+
+template <typename T>
+using CpuElementwiseDivisionBroadcastDynamicShapeFixture = ArithmeticDivisionBroadcastDynamicShapeValidationFixture<Tensor, Accessor, NEElementwiseDivision, T>;
+
+TEST_SUITE(F32)
+
+FIXTURE_DATA_TEST_CASE(RunSmall, CpuElementwiseDivisionDynamicShapeFixture<float>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapes(), ElementwiseDivisionFP32Dataset),
+                                                                                                                        InPlaceDataSet))
+{
+    // Validate output
+    validate(Accessor(_target), _reference, tolerance_fp32, 0.01);
+}
+
+FIXTURE_DATA_TEST_CASE(RunSmallBroadcast, CpuElementwiseDivisionBroadcastDynamicShapeFixture<float>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapesBroadcast(),
+                       ElementwiseDivisionFP32Dataset),
+                       OutOfPlaceDataSet))
+{
+    // Validate output
+    validate(Accessor(_target), _reference, tolerance_fp32, 0.01);
+}
+
+TEST_SUITE_END() // F32
+TEST_SUITE_END() // DynamicShape
+
 TEST_SUITE(Float)
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 TEST_SUITE(F16)
-FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<half>, framework::DatasetMode::ALL, combine(datasets::SmallShapes(), ElementwiseDivisionFP16Dataset))
+FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<half>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapes(), ElementwiseDivisionFP16Dataset),
+                                                                                                          InPlaceDataSet))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_fp16, 0.01);
@@ -103,7 +138,8 @@ TEST_SUITE_END() // F16
 #endif           /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
 
 TEST_SUITE(F32)
-FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<float>, framework::DatasetMode::ALL, combine(datasets::SmallShapes(), ElementwiseDivisionFP32Dataset))
+FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<float>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapes(), ElementwiseDivisionFP32Dataset),
+                                                                                                           InPlaceDataSet))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_fp32, 0.01);
@@ -112,8 +148,16 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<float>, framework:
 template <typename T>
 using NEElementwiseDivisionBroadcastFixture = ArithmeticDivisionBroadcastValidationFixture<Tensor, Accessor, NEElementwiseDivision, T>;
 
-FIXTURE_DATA_TEST_CASE(RunSmallBroadcast, NEElementwiseDivisionBroadcastFixture<float>, framework::DatasetMode::ALL, combine(datasets::SmallShapesBroadcast(),
-                       ElementwiseDivisionFP32Dataset))
+FIXTURE_DATA_TEST_CASE(RunSmallBroadcast, NEElementwiseDivisionBroadcastFixture<float>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapesBroadcast(),
+                       ElementwiseDivisionFP32Dataset),
+                       OutOfPlaceDataSet))
+{
+    // Validate output
+    validate(Accessor(_target), _reference, tolerance_fp32, 0.01);
+}
+FIXTURE_DATA_TEST_CASE(RunTinyBroadcastInPlace, NEElementwiseDivisionBroadcastFixture<float>, framework::DatasetMode::ALL, combine(combine(datasets::TinyShapesBroadcastInplace(),
+                       ElementwiseDivisionFP32Dataset),
+                       InPlaceDataSet))
 {
     // Validate output
     validate(Accessor(_target), _reference, tolerance_fp32, 0.01);
@@ -123,16 +167,17 @@ TEST_SUITE_END() // Float
 
 TEST_SUITE(Integer)
 TEST_SUITE(S32)
-FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<int32_t>, framework::DatasetMode::ALL, combine(datasets::SmallShapes(), ElementwiseDivisionS32Dataset))
+FIXTURE_DATA_TEST_CASE(RunSmall, NEElementwiseDivisionFixture<int32_t>, framework::DatasetMode::ALL, combine(combine(datasets::SmallShapes(), ElementwiseDivisionS32Dataset),
+                                                                                                             InPlaceDataSet))
 {
     // Validate output
-    validate(Accessor(_target), _reference);
+    validate(Accessor(_target), _reference, tolerance_zero_s32);
 }
 TEST_SUITE_END() // S32
 TEST_SUITE_END() // Integer
 
 TEST_SUITE_END() // ElementwiseDivision
-TEST_SUITE_END() // NEON
+TEST_SUITE_END() // Neon
 } // namespace validation
 } // namespace test
 } // namespace arm_compute
