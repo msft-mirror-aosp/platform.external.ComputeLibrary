@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -111,7 +111,6 @@ public:
         config.use_tuner   = common_params.enable_tuner;
         config.tuner_mode  = common_params.tuner_mode;
         config.tuner_file  = common_params.tuner_file;
-        config.mlgo_file   = common_params.mlgo_file;
 
         graph.finalize(common_params.target, config);
 
@@ -131,14 +130,6 @@ private:
 };
 
 /** Main program for LeNet
- *
- * Model is based on:
- *      http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf
- *      "Gradient-Based Learning Applied to Document Recognition"
- *      Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner
- *
- * The original model uses tanh instead of relu activations. However the use of relu activations in lenet has been
- * widely adopted to improve accuracy.*
  *
  * @note To list all the possible arguments execute the binary appended with the --help option
  *

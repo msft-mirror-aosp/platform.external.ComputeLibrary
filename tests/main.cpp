@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -21,6 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "support/MemorySupport.h"
 #include "support/StringSupport.h"
 #include "tests/AssetsLibrary.h"
 #include "tests/framework/DatasetModes.h"
@@ -38,14 +39,15 @@
 
 #ifdef ARM_COMPUTE_CL
 #include "arm_compute/core/CL/OpenCL.h"
-#include "arm_compute/runtime/CL/CLGEMMHeuristicsHandle.h"
 #include "arm_compute/runtime/CL/CLHelpers.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "arm_compute/runtime/CL/CLTuner.h"
 #include "utils/TypePrinter.h"
 #endif /* ARM_COMPUTE_CL */
+#ifdef ARM_COMPUTE_GC
+#include "arm_compute/runtime/GLES_COMPUTE/GCScheduler.h"
+#endif /* ARM_COMPUTE_GC */
 #include "arm_compute/runtime/Scheduler.h"
-#include "src/common/cpuinfo/CpuModel.h"
 
 #include <fstream>
 #include <initializer_list>
@@ -116,7 +118,7 @@ int main(int argc, char **argv)
     auto filter_id = parser.add_option<utils::SimpleOption<std::string>>("filter-id");
     filter_id->set_help("List of test ids. ... can be used to define a range.");
     auto stop_on_error = parser.add_option<utils::ToggleOption>("stop-on-error");
-    stop_on_error->set_help("Stop execution after the first failed test (useful for debugging)");
+    stop_on_error->set_help("Abort execution after the first failed test (useful for debugging)");
     auto seed = parser.add_option<utils::SimpleOption<std::random_device::result_type>>("seed", std::random_device()());
     seed->set_help("Global seed for random number generation");
     auto list_tests = parser.add_option<utils::ToggleOption>("list-tests", false);
@@ -142,16 +144,11 @@ int main(int argc, char **argv)
 
     auto tuner_file = parser.add_option<utils::SimpleOption<std::string>>("tuner-file", "");
     tuner_file->set_help("File to load/save CLTuner values");
-
-    auto mlgo_file = parser.add_option<utils::SimpleOption<std::string>>("mlgo-file", "");
-    mlgo_file->set_help("File to load MLGO heuristics");
 #endif /* ARM_COMPUTE_CL */
     auto threads = parser.add_option<utils::SimpleOption<int>>("threads", 1);
     threads->set_help("Number of threads to use");
     auto cooldown_sec = parser.add_option<utils::SimpleOption<float>>("delay", -1.f);
     cooldown_sec->set_help("Delay to add between test executions in seconds");
-    auto configure_only = parser.add_option<utils::ToggleOption>("configure-only", false);
-    configure_only->set_help("Only configures kernels, without allocating, running or validating. Needed in order to validate OpenCL kernel run-time compilation, without necessarily running or validating the kernels' execution");
 
     try
     {
@@ -169,25 +166,37 @@ int main(int argc, char **argv)
         Scheduler::get().set_num_threads(threads->value());
 
         // Create CPU context
-        auto cpu_ctx = std::make_unique<RuntimeContext>();
+        auto cpu_ctx = support::cpp14::make_unique<RuntimeContext>();
         cpu_ctx->set_scheduler(&Scheduler::get());
 
         // Track CPU context
-        auto cpu_ctx_track = std::make_unique<ContextSchedulerUser>(cpu_ctx.get());
+        auto cpu_ctx_track = support::cpp14::make_unique<ContextSchedulerUser>(cpu_ctx.get());
 
         // Create parameters
-        parameters = std::make_unique<ParametersLibrary>();
+        parameters = support::cpp14::make_unique<ParametersLibrary>();
         parameters->set_cpu_ctx(std::move(cpu_ctx));
 
+#ifdef ARM_COMPUTE_GC
+        // Setup OpenGL context
+        {
+            auto gles_ctx = support::cpp14::make_unique<GCRuntimeContext>();
+            ARM_COMPUTE_ERROR_ON(gles_ctx == nullptr);
+            {
+                // Legacy singletons API: This has been deprecated and the singletons will be removed
+                // Setup singleton for backward compatibility
+                GCScheduler::get().default_init();
+            }
+            parameters->set_gc_ctx(std::move(gles_ctx));
+        };
+#endif /* ARM_COMPUTE_GC */
+
 #ifdef ARM_COMPUTE_CL
-        CLTuner                cl_tuner(false);
-        CLGEMMHeuristicsHandle gemm_heuristics;
+        CLTuner cl_tuner(false);
         if(opencl_is_available())
         {
-            auto ctx_dev_err = create_opencl_context_and_device(CLBackendType::Native);
+            auto ctx_dev_err = create_opencl_context_and_device();
             ARM_COMPUTE_ERROR_ON_MSG(std::get<2>(ctx_dev_err) != CL_SUCCESS, "Failed to create OpenCL context");
-            gemm_heuristics.reload_from_file(mlgo_file->value());
-            CLScheduler::get().default_init_with_context(std::get<1>(ctx_dev_err), std::get<0>(ctx_dev_err), &cl_tuner, &gemm_heuristics);
+            CLScheduler::get().default_init_with_context(std::get<1>(ctx_dev_err), std::get<0>(ctx_dev_err), &cl_tuner);
         }
 
         if(enable_tuner->is_set())
@@ -236,18 +245,13 @@ int main(int argc, char **argv)
 #endif /* ARM_COMPUTE_CL */
                 const arm_compute::CPUInfo &cpu_info = Scheduler::get().cpu_info();
                 const unsigned int          num_cpus = cpu_info.get_cpu_num();
-                p->print_entry("cpu_has_sve", support::cpp11::to_string(cpu_info.has_sve()));
-                p->print_entry("cpu_has_sme", support::cpp11::to_string(cpu_info.has_sme()));
-                p->print_entry("cpu_has_sme2", support::cpp11::to_string(cpu_info.has_sme2()));
                 p->print_entry("cpu_has_fp16", support::cpp11::to_string(cpu_info.has_fp16()));
-                p->print_entry("cpu_has_bf16", support::cpp11::to_string(cpu_info.has_bf16()));
                 p->print_entry("cpu_has_dotprod", support::cpp11::to_string(cpu_info.has_dotprod()));
-                p->print_entry("cpu_has_svebf16", support::cpp11::to_string(cpu_info.has_svebf16()));
 
                 for(unsigned int j = 0; j < num_cpus; ++j)
                 {
                     const CPUModel model = cpu_info.get_cpu_model(j);
-                    p->print_entry("CPU" + support::cpp11::to_string(j), cpuinfo::cpu_model_to_string(model));
+                    p->print_entry("CPU" + support::cpp11::to_string(j), cpu_model_to_string(model));
                 }
                 p->print_entry("Iterations", support::cpp11::to_string(options.iterations->value()));
                 p->print_entry("Threads", support::cpp11::to_string(threads->value()));
@@ -272,7 +276,6 @@ int main(int argc, char **argv)
         fconfig.mode           = dataset_mode->value();
         fconfig.log_level      = options.log_level->value();
         fconfig.cooldown_sec   = cooldown_sec->value();
-        fconfig.configure_only = configure_only->value();
         framework.init(fconfig);
 
         for(auto &p : printers)
@@ -309,8 +312,8 @@ int main(int argc, char **argv)
             return 0;
         }
 
-        library       = std::make_unique<AssetsLibrary>(assets->value(), seed->value());
-        fixed_library = std::make_unique<AssetsLibrary>(assets->value(), fixed_seed);
+        library       = support::cpp14::make_unique<AssetsLibrary>(assets->value(), seed->value());
+        fixed_library = support::cpp14::make_unique<AssetsLibrary>(assets->value(), fixed_seed);
 
         if(!parser.validate())
         {

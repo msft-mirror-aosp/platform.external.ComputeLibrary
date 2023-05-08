@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,7 +27,6 @@
 #include "utils/Utils.cpp"
 
 #include "ValidateExample.h"
-#include "arm_compute/runtime/CL/CLHelpers.h"
 #include "arm_compute/runtime/Scheduler.h"
 #include "tests/AssetsLibrary.h"
 #include "tests/Globals.h"
@@ -40,6 +39,9 @@
 #ifdef ARM_COMPUTE_CL
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #endif /* ARM_COMPUTE_CL */
+#ifdef ARM_COMPUTE_GC
+#include "arm_compute/runtime/GLES_COMPUTE/GCScheduler.h"
+#endif /* ARM_COMPUTE_GC */
 
 #include <libgen.h>
 
@@ -136,8 +138,8 @@ int run_example(int argc, char **argv, std::unique_ptr<ValidateExample> example)
         g_example_argv.emplace_back(const_cast<char *>(arg.c_str())); // NOLINT
     }
 
-    library       = std::make_unique<AssetsLibrary>("." /* Only using random values */, seed->value());
-    fixed_library = std::make_unique<AssetsLibrary>(".", fixed_seed);
+    library       = support::cpp14::make_unique<AssetsLibrary>("." /* Only using random values */, seed->value());
+    fixed_library = support::cpp14::make_unique<AssetsLibrary>(".", fixed_seed);
 
     if(options.log_level->value() > framework::LogLevel::NONE)
     {
@@ -146,24 +148,6 @@ int run_example(int argc, char **argv, std::unique_ptr<ValidateExample> example)
             p->print_global_header();
         }
     }
-
-#ifdef ARM_COMPUTE_CL
-    if(opencl_is_available())
-    {
-        CLBackendType backend_type = CLBackendType::Native;
-        for(auto &arg : example_args->value())
-        {
-            if(arg.find("--target=clvk") != std::string::npos)
-            {
-                backend_type = CLBackendType::Clvk;
-                break;
-            }
-        }
-        auto ctx_dev_err = create_opencl_context_and_device(backend_type);
-        ARM_COMPUTE_ERROR_ON_MSG(std::get<2>(ctx_dev_err) != CL_SUCCESS, "Failed to create OpenCL context");
-        CLScheduler::get().default_init_with_context(std::get<1>(ctx_dev_err), std::get<0>(ctx_dev_err), nullptr);
-    }
-#endif /* ARM_COMPUTE_CL */
 
     if(options.log_level->value() >= framework::LogLevel::CONFIG)
     {
@@ -175,6 +159,10 @@ int run_example(int argc, char **argv, std::unique_ptr<ValidateExample> example)
 #ifdef ARM_COMPUTE_CL
             if(opencl_is_available())
             {
+                if(!CLScheduler::get().is_initialised())
+                {
+                    CLScheduler::get().default_init();
+                }
                 p->print_entry("CL_DEVICE_VERSION", CLKernelLibrary::get().get_device_version());
             }
             else

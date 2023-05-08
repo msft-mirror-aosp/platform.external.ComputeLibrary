@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -162,7 +162,7 @@ FIXTURE_DATA_TEST_CASE(Large, NESpaceToBatchLayerQuantizedFixture<uint8_t>, fram
 TEST_SUITE_END() // QASYMM8
 TEST_SUITE_END() // Quantized
 TEST_SUITE_END() // SpaceToBatch
-TEST_SUITE_END() // Neon
+TEST_SUITE_END() // NEON
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

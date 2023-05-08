@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,9 +23,9 @@
  */
 #include "arm_compute/core/Types.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
-#include "src/gpu/cl/kernels/ClGemmLowpMatrixMultiplyReshapedKernel.h"
-#include "src/gpu/cl/kernels/ClGemmReshapeLhsMatrixKernel.h"
-#include "src/gpu/cl/kernels/ClGemmReshapeRhsMatrixKernel.h"
+#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyReshapedKernel.h"
+#include "src/core/CL/kernels/CLGEMMReshapeLHSMatrixKernel.h"
+#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
 #include "tests/CL/CLAccessor.h"
 #include "tests/CL/Helper.h"
 #include "tests/framework/Asserts.h"
@@ -42,14 +42,14 @@ namespace validation
 {
 using namespace arm_compute::misc::shape_calculator;
 
-// Create function for ClGemmReshapeLhsMatrixKernel
-using CLGEMMReshapeLHSMatrix = CLSynthetizeOperator<opencl::kernels::ClGemmReshapeLhsMatrixKernel>;
+// Create function for CLGEMMReshapeLHSMatrixKernel
+using CLGEMMReshapeLHSMatrix = CLSynthetizeFunction<CLGEMMReshapeLHSMatrixKernel>;
 
-// Create function for ClGemmReshapeRhsMatrixKernel
-using CLGEMMReshapeRHSMatrix = CLSynthetizeOperator<opencl::kernels::ClGemmReshapeRhsMatrixKernel>;
+// Create function for CLGEMMReshapeRHSMatrixKernel
+using CLGEMMReshapeRHSMatrix = CLSynthetizeFunction<CLGEMMReshapeRHSMatrixKernel>;
 
-// Create function for CLGEMMLowpMatrixMultiplyReshapedKernel
-using CLGEMMLowpMatrixMultiplyReshaped = CLSynthetizeOperator<opencl::kernels::ClGemmLowpMatrixMultiplyReshapedKernel>;
+// Create function for CLGEMMMatrixMultiplyReshapedKernel
+using CLGEMMLowpMatrixMultiplyReshaped = CLSynthetizeFunction<CLGEMMLowpMatrixMultiplyReshapedKernel>;
 
 // Fixture for CLGEMMLowpMatrixMultiplyReshaped
 using CLGEMMLowpMatrixMultiplyReshapedFixture = GEMMLowpMatrixMultiplyReshapedValidationFixture<CLTensor, CLAccessor, CLGEMMReshapeLHSMatrix, CLGEMMReshapeRHSMatrix, CLGEMMLowpMatrixMultiplyReshaped>;
@@ -62,19 +62,8 @@ namespace
 {
 // *INDENT-OFF*
 // clang-format off
-
-/** M, N combinations to test
- *  1: Special 1x1 case
- *  2: Special multples of processor size in both dimensions
- *  3: Non multiples of processor size in both dimensions
-*/
-const auto m_n_values = zip(
-    framework::dataset::make("M", {1, 16, 37}),
-    framework::dataset::make("N", {1, 16, 51})
-    );
-
 /** M values to test */
-const auto m_values = framework::dataset::make("M", {1, 37});
+const auto m_values = framework::dataset::make("M", 37);
 
 /** M_W values to test */
 const auto m_w_values = framework::dataset::make("M_W", 5);
@@ -83,7 +72,7 @@ const auto m_w_values = framework::dataset::make("M_W", 5);
 const auto m_h_values = framework::dataset::make("M_H", 7);
 
 /** N values to test */
-const auto n_values = framework::dataset::make("N", {1, 51});
+const auto n_values = framework::dataset::make("N", 51);
 
 /** K values to test */
 const auto k_values = framework::dataset::make("K", 23);
@@ -136,8 +125,9 @@ TEST_SUITE(QUANTIZED)
 
 TEST_SUITE(QASYMM8)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLGEMMLowpMatrixMultiplyReshapedFixture, framework::DatasetMode::ALL,
-                combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(
-                                                                   m_n_values,
+                combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(
+                                                                   m_values,
+                                                                   n_values),
                                                                    k_values),
                                                                    b_values),
                                                                    m0_values_precommit_1),
@@ -215,8 +205,9 @@ TEST_SUITE_END() // QASYMM8
 
 TEST_SUITE(QASYMM8_SIGNED)
 FIXTURE_DATA_TEST_CASE(RunSmall, CLGEMMLowpMatrixMultiplyReshapedFixture, framework::DatasetMode::ALL,
-                combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(
-                                                                   m_n_values,
+                combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(combine(
+                                                                   m_values,
+                                                                   n_values),
                                                                    k_values),
                                                                    b_values),
                                                                    m0_values_precommit_2),

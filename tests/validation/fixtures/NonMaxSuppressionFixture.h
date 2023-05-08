@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -59,9 +59,9 @@ public:
 
 protected:
     template <typename U>
-    void fill(U &&tensor, int i, float lo, float hi)
+    void fill(U &&tensor, int i, int lo, int hi)
     {
-        std::uniform_real_distribution<float> distribution(lo, hi);
+        std::uniform_real_distribution<> distribution(lo, hi);
         library->fill_boxes(tensor, distribution, i);
     }
 
@@ -77,18 +77,18 @@ protected:
         FunctionType nms_func;
         nms_func.configure(&bboxes, &scores, &indices, max_output_size, score_threshold, nms_threshold);
 
-        ARM_COMPUTE_ASSERT(bboxes.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(indices.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(scores.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(bboxes.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(indices.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(scores.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Allocate tensors
         bboxes.allocator()->allocate();
         indices.allocator()->allocate();
         scores.allocator()->allocate();
 
-        ARM_COMPUTE_ASSERT(!bboxes.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!indices.info()->is_resizable());
-        ARM_COMPUTE_ASSERT(!scores.info()->is_resizable());
+        ARM_COMPUTE_EXPECT(!bboxes.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!indices.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_EXPECT(!scores.info()->is_resizable(), framework::LogLevel::ERRORS);
 
         // Fill tensors
         fill(AccessorType(bboxes), 0, 0.f, 1.f);

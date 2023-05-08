@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,8 +30,8 @@
 #include "arm_compute/core/Types.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 #include "arm_compute/runtime/NEON/NEScheduler.h"
-#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEStackLayerKernel.h"
+#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -46,8 +46,6 @@ NEStackLayer::NEStackLayer() // NOLINT
 
 void NEStackLayer::configure(const std::vector<ITensor *> &input, int axis, ITensor *output)
 {
-    ARM_COMPUTE_LOG_PARAMS(input, axis, output);
-
     _num_inputs = input.size();
     _stack_kernels.resize(_num_inputs);
 
@@ -56,7 +54,7 @@ void NEStackLayer::configure(const std::vector<ITensor *> &input, int axis, ITen
 
     for(unsigned int i = 0; i < _num_inputs; i++)
     {
-        _stack_kernels[i] = std::make_unique<NEStackLayerKernel>();
+        _stack_kernels[i] = arm_compute::support::cpp14::make_unique<NEStackLayerKernel>();
         _stack_kernels[i]->configure(input[i], axis_u, i, _num_inputs, output);
     }
 }

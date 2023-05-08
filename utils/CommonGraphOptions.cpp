@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -87,7 +87,6 @@ namespace utils
     os << "Cache enabled? : " << (common_params.enable_cl_cache ? true_str : false_str) << std::endl;
     os << "Tuner mode : " << common_params.tuner_mode << std::endl;
     os << "Tuner file : " << common_params.tuner_file << std::endl;
-    os << "MLGO file : " << common_params.mlgo_file << std::endl;
     os << "Fast math enabled? : " << (common_params.fast_math_hint == FastMathHint::Enabled ? true_str : false_str) << std::endl;
     if(!common_params.data_path.empty())
     {
@@ -117,7 +116,6 @@ namespace utils
 CommonGraphOptions::CommonGraphOptions(CommandLineParser &parser)
     : help(parser.add_option<ToggleOption>("help")),
       threads(parser.add_option<SimpleOption<int>>("threads", 1)),
-      batches(parser.add_option<SimpleOption<int>>("batches", 1)),
       target(),
       data_type(),
       data_layout(),
@@ -131,14 +129,13 @@ CommonGraphOptions::CommonGraphOptions(CommandLineParser &parser)
       validation_file(parser.add_option<SimpleOption<std::string>>("validation-file")),
       validation_path(parser.add_option<SimpleOption<std::string>>("validation-path")),
       validation_range(parser.add_option<SimpleOption<std::string>>("validation-range")),
-      tuner_file(parser.add_option<SimpleOption<std::string>>("tuner-file")),
-      mlgo_file(parser.add_option<SimpleOption<std::string>>("mlgo-file"))
+      tuner_file(parser.add_option<SimpleOption<std::string>>("tuner-file"))
 {
     std::set<arm_compute::graph::Target> supported_targets
     {
         Target::NEON,
         Target::CL,
-        Target::CLVK,
+        Target::GC,
     };
 
     std::set<arm_compute::DataType> supported_data_types
@@ -146,7 +143,6 @@ CommonGraphOptions::CommonGraphOptions(CommandLineParser &parser)
         DataType::F16,
         DataType::F32,
         DataType::QASYMM8,
-        DataType::QASYMM8_SIGNED,
     };
 
     std::set<DataLayout> supported_data_layouts
@@ -169,7 +165,6 @@ CommonGraphOptions::CommonGraphOptions(CommandLineParser &parser)
 
     help->set_help("Show this help message");
     threads->set_help("Number of threads to use");
-    batches->set_help("Number of batches to use for the inputs");
     target->set_help("Target to execute on");
     data_type->set_help("Data type to use");
     data_layout->set_help("Data layout to use");
@@ -188,7 +183,6 @@ CommonGraphOptions::CommonGraphOptions(CommandLineParser &parser)
     validation_path->set_help("Path to the validation data");
     validation_range->set_help("Range of the images to validate for (Format : start,end)");
     tuner_file->set_help("File to load/save CLTuner values");
-    mlgo_file->set_help("File to load MLGO heuristics");
 }
 
 CommonGraphParams consume_common_graph_parameters(CommonGraphOptions &options)
@@ -199,7 +193,6 @@ CommonGraphParams consume_common_graph_parameters(CommonGraphOptions &options)
     CommonGraphParams common_params;
     common_params.help      = options.help->is_set() ? options.help->value() : false;
     common_params.threads   = options.threads->value();
-    common_params.batches   = options.batches->value();
     common_params.target    = options.target->value();
     common_params.data_type = options.data_type->value();
     if(options.data_layout->is_set())
@@ -207,7 +200,7 @@ CommonGraphParams consume_common_graph_parameters(CommonGraphOptions &options)
         common_params.data_layout = options.data_layout->value();
     }
     common_params.enable_tuner           = options.enable_tuner->is_set() ? options.enable_tuner->value() : false;
-    common_params.enable_cl_cache        = common_params.target == arm_compute::graph::Target::NEON ? false : (options.enable_cl_cache->is_set() ? options.enable_cl_cache->value() : true);
+    common_params.enable_cl_cache        = common_params.target == arm_compute::graph::Target::CL ? (options.enable_cl_cache->is_set() ? options.enable_cl_cache->value() : true) : false;
     common_params.tuner_mode             = options.tuner_mode->value();
     common_params.fast_math_hint         = options.fast_math_hint->is_set() ? fast_math_hint_value : FastMathHint::Disabled;
     common_params.data_path              = options.data_path->value();
@@ -218,7 +211,6 @@ CommonGraphParams consume_common_graph_parameters(CommonGraphOptions &options)
     common_params.validation_range_start = validation_range.first;
     common_params.validation_range_end   = validation_range.second;
     common_params.tuner_file             = options.tuner_file->value();
-    common_params.mlgo_file              = options.mlgo_file->value();
 
     return common_params;
 }

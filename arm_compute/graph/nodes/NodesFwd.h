@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Arm Limited.
+ * Copyright (c) 2018-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -49,9 +49,7 @@ class EltwiseLayerNode;
 class FlattenLayerNode;
 class FullyConnectedLayerNode;
 class FusedConvolutionBatchNormalizationNode;
-class FusedConvolutionWithPostOpNode;
 class FusedDepthwiseConvolutionBatchNormalizationNode;
-class FusedConvolutionBatchNormalizationWithPostOpsNode;
 class GenerateProposalsLayerNode;
 class InputNode;
 class L2NormalizeLayerNode;
@@ -75,6 +73,8 @@ class SliceLayerNode;
 class SplitLayerNode;
 class StackLayerNode;
 class StridedSliceLayerNode;
+class UpsampleLayerNode;
+class YOLOLayerNode;
 } // namespace graph
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_GRAPH_NODES_FWD_H */

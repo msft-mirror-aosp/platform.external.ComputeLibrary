@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021 Arm Limited.
+ * Copyright (c) 2019 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,6 +24,7 @@
 #ifndef ARM_COMPUTE_RUNTIME_CONTEXT_H
 #define ARM_COMPUTE_RUNTIME_CONTEXT_H
 
+#include "arm_compute/runtime/DeviceProperties.h"
 #include "arm_compute/runtime/IRuntimeContext.h"
 
 #include <memory>
@@ -50,12 +51,14 @@ public:
     void set_scheduler(IScheduler *scheduler);
 
     // Inherited overridden methods
-    IScheduler    *scheduler() override;
-    IAssetManager *asset_manager() override;
+    IScheduler             *scheduler() override;
+    IAssetManager          *asset_manager() override;
+    const DeviceProperties &properties() override;
 
 private:
     std::unique_ptr<IScheduler> _owned_scheduler{ nullptr };
     IScheduler                 *_scheduler{ nullptr };
+    DeviceProperties            _device_props{};
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_RUNTIME_CONTEXT_H */

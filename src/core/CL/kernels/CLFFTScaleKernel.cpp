@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited.
+ * Copyright (c) 2019-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -38,7 +38,7 @@ namespace
 Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output)
 {
     ARM_COMPUTE_RETURN_ERROR_ON_F16_UNSUPPORTED(input);
-    ARM_COMPUTE_RETURN_ERROR_ON_DATA_TYPE_CHANNEL_NOT_IN(input, 2, DataType::F16, DataType::F32);
+    ARM_COMPUTE_RETURN_ERROR_ON_DATA_TYPE_CHANNEL_NOT_IN(input, 2, DataType::F32);
 
     // Checks performed when output is configured
     if((output != nullptr) && (output->total_size() != 0))
@@ -50,12 +50,30 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output)
 
     return Status{};
 }
+
+std::pair<Status, Window> validate_and_configure_window(ITensorInfo *input, ITensorInfo *output)
+{
+    // Configure kernel window
+    Window win = calculate_max_window(*input, Steps());
+
+    if(output != nullptr)
+    {
+        // Output auto inizialitation if not yet initialized
+        auto_init_if_empty(*output, *input->clone());
+
+        // CLFFTScaleKernel doesn't need padding so update_window_and_padding() can be skipped
+        Coordinates coord;
+        coord.set_num_dimensions(output->num_dimensions());
+        output->set_valid_region(ValidRegion(coord, output->tensor_shape()));
+    }
+
+    return std::make_pair(Status{}, win);
+}
 } // namespace
 
 CLFFTScaleKernel::CLFFTScaleKernel()
     : _input(nullptr), _output(nullptr), _run_in_place(false)
 {
-    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLFFTScaleKernel::configure(ICLTensor *input, ICLTensor *output, const FFTScaleKernelInfo &config)
@@ -67,7 +85,6 @@ void CLFFTScaleKernel::configure(const CLCompileContext &compile_context, ICLTen
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input);
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(input->info(), (output != nullptr) ? output->info() : nullptr));
-    auto padding_info = get_padding_info({ input, output });
 
     _input        = input;
     _output       = output;
@@ -77,7 +94,6 @@ void CLFFTScaleKernel::configure(const CLCompileContext &compile_context, ICLTen
     CLBuildOptions build_opts;
     build_opts.add_option_if(_run_in_place, "-DIN_PLACE");
     build_opts.add_option("-DVEC_SIZE=" + support::cpp11::to_string(output != nullptr ? output->info()->num_channels() : input->info()->num_channels()));
-    build_opts.add_option("-DDATA_TYPE=" + get_cl_type_from_data_type(input->info()->data_type()));
     build_opts.add_option_if(config.conjugate, "-DCONJ");
     std::string kernel_name = "fft_scale_conj";
     _kernel                 = create_kernel(compile_context, kernel_name, build_opts.options());
@@ -87,15 +103,9 @@ void CLFFTScaleKernel::configure(const CLCompileContext &compile_context, ICLTen
     _kernel.setArg<cl_float>(idx, config.scale);
 
     // Configure kernel window
-    Window win = calculate_max_window(*input->info(), Steps());
-
-    if(output != nullptr)
-    {
-        // Output auto inizialitation if not yet initialized
-        auto_init_if_empty(*output->info(), *input->info()->clone());
-    }
-
-    ICLKernel::configure_internal(win);
+    auto win_config = validate_and_configure_window(input->info(), _run_in_place ? nullptr : output->info());
+    ARM_COMPUTE_ERROR_THROW_ON(win_config.first);
+    ICLKernel::configure_internal(win_config.second);
 
     // Set config_id for enabling LWS tuning
     _config_id = kernel_name;
@@ -105,13 +115,13 @@ void CLFFTScaleKernel::configure(const CLCompileContext &compile_context, ICLTen
     _config_id += support::cpp11::to_string(input->info()->dimension(0));
     _config_id += "_";
     _config_id += support::cpp11::to_string(input->info()->dimension(1));
-    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLFFTScaleKernel::validate(const ITensorInfo *input, const ITensorInfo *output, const FFTScaleKernelInfo &config)
 {
     ARM_COMPUTE_UNUSED(config);
     ARM_COMPUTE_RETURN_ON_ERROR(validate_arguments(input, output));
+    ARM_COMPUTE_RETURN_ON_ERROR(validate_and_configure_window(input->clone().get(), output->clone().get()).first);
 
     return Status{};
 }

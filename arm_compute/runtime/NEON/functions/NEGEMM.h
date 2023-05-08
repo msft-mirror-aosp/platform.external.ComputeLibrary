@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Arm Limited.
+ * Copyright (c) 2017-2020 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,14 +27,35 @@
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/IMemoryManager.h"
 #include "arm_compute/runtime/IWeightsManager.h"
+#include "arm_compute/runtime/MemoryGroup.h"
+#include "arm_compute/runtime/NEON/functions/NEActivationLayer.h"
+#include "arm_compute/runtime/NEON/functions/NEArithmeticAddition.h"
+#include "arm_compute/runtime/NEON/functions/NEGEMMAssemblyDispatch.h"
+#include "arm_compute/runtime/Tensor.h"
 
 #include <memory>
 
 namespace arm_compute
 {
-/** Basic function to execute GEMM. This function calls the following kernels:
+class NEGEMMInterleave4x4Kernel;
+class NEGEMMMatrixAdditionKernel;
+class NEGEMMMatrixMultiplyKernel;
+class NEGEMMTranspose1xWKernel;
+/** Basic function to execute GEMM on NEON. This function calls the following NEON kernels:
  *
- *  -# @ref cpu::CpuGemm
+ * If optimized assembly is available:
+ *  -# @ref NEGEMMAssemblyDispatch
+ *  -# @ref NEActivationLayer (if alpha != 1.0)
+ * Else:
+ *  -# @ref NEGEMMInterleave4x4Kernel (if the output tensor is a matrix)
+ *  -# @ref NEGEMMTranspose1xWKernel (if the output tensor is a matrix)
+ *  -# @ref NEGEMMMatrixMultiplyKernel
+ * In both cases:
+ *  -# @ref NEGEMMMatrixAdditionKernel (if c != nullptr and beta != 0.0 and is not reshaped once)
+ * Else:
+ *  -# @ref NEArithmeticAdditionKernel (if c != nullptr and is reshaped once and not optimized assembly in place)
+ *
+ *  -# @ref NEActivationLayer (if activation is specified in GEMMInfo)
  */
 class NEGEMM : public IFunction
 {
@@ -53,20 +74,8 @@ public:
     ~NEGEMM();
     /** Initialise the kernel's inputs, output
      *
-     * Valid data layouts:
-     * - All
-     *
-     * Valid data type configurations:
-     * |src0         |src1        |src2      |dst            |
-     * |:------------|:-----------|:---------|:--------------|
-     * |F32          |F32         |F32       |F32            |
-     * |F16          |F16         |F16       |F16            |
-     * |BFLOAT16     |BFLOAT16    |BFLOAT16  |BFLOAT16       |
-     *
      * @note GEMM: General Matrix Multiply - [alpha * A * B + beta * C].
      * @note GEMM: The tensors a, b, c, d must have the same data type. You should not mix data types when calling this function.
-     *
-     * @note Batched GEMM only supports broadcasting cases where RHS rank < LHS rank but not the other way around
      *
      * @param[in]  a         First input tensor  (Matrix A or Vector A). Data type supported: BFLOAT16/F16/F32
      * @param[in]  b         Second input tensor (Matrix B). Data type supported: same as @p a
@@ -80,28 +89,46 @@ public:
     void configure(const ITensor *a, const ITensor *b, const ITensor *c, ITensor *d, float alpha, float beta, const GEMMInfo &gemm_info = GEMMInfo());
     /** Static function to check if given info will lead to a valid configuration of @ref NEGEMM.
      *
-     * Similar to @ref NEGEMM::configure()
+     * @param[in]  a         First input tensor info  (Matrix or Vector A). Data types supported: BFLOAT16/F16/F32
+     * @param[in]  b         Second input tensor info (Matrix B). Data type supported: same as @p a.
+     * @param[in]  c         Third input tensor info  (Matrix C). It can be a nullptr if just the multiplication between @p a and @p b is needed. Data type supported: same as @p a.
+     * @param[out] output    Output tensor info. Data type supported: same as @p a
+     * @param[in]  alpha     Weight of the matrix product
+     * @param[in]  beta      Weight of matrix C
+     * @param[in]  gemm_info (Optional) Specifies if the matrix A and/or matrix B have been reshaped and
+     *                       if the reshape of matrix B should happen only for the first run
      *
      * @return a status
      */
     static Status validate(const ITensorInfo *a, const ITensorInfo *b, const ITensorInfo *c, const ITensorInfo *output, float alpha, float beta, const GEMMInfo &gemm_info = GEMMInfo());
-
-    /** Static function that queries whether there exists fixed-format kernel and if it exists it will return in the first argument in what format
-     * weights are expected to be reshaped as defined by WeightFormat class. Apart from the first argument the rest of the arguments are the same
-     * as in @ref NEGEMM::validate() except that all arguments are required.
-     *
-     * @return a status
-     */
-    static Status has_opt_impl(arm_compute::WeightFormat &expected_weight_format, const ITensorInfo *a, const ITensorInfo *b, const ITensorInfo *c, const ITensorInfo *output,
-                               float alpha, float beta, const GEMMInfo &gemm_info = GEMMInfo());
 
     // Inherited methods overridden:
     void run() override;
     void prepare() override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    MemoryGroup                                 _memory_group;
+    IWeightsManager                            *_weights_manager;
+    std::unique_ptr<NEGEMMInterleave4x4Kernel>  _interleave_kernel;
+    std::unique_ptr<NEGEMMTranspose1xWKernel>   _transpose_kernel;
+    std::unique_ptr<NEGEMMMatrixMultiplyKernel> _mm_kernel;
+    NEGEMMAssemblyDispatch                      _asm_glue;
+    std::unique_ptr<NEGEMMMatrixAdditionKernel> _ma_kernel;
+    NEActivationLayer                           _alpha_scale_func;
+    NEArithmeticAddition                        _add_bias;
+    NEActivationLayer                           _activation_func;
+
+    Tensor         _tmp_a;
+    Tensor         _tmp_b;
+    Tensor         _tmp_d;
+    const ITensor *_original_b;
+    bool           _run_vector_matrix_multiplication;
+    bool           _run_alpha_scale;
+    bool           _run_addition;
+    bool           _run_bias_addition;
+    bool           _run_activation;
+    bool           _reshape_b_only_on_first_run;
+    bool           _is_prepared;
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_NEGEMM_H */
