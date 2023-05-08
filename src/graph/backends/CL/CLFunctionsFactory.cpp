@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -66,6 +66,7 @@ struct CLEltwiseFunctions
     using Subtraction    = CLArithmeticSubtraction;
     using Multiplication = CLPixelWiseMultiplication;
     using Maximum        = CLElementwiseMax;
+    using Division       = CLArithmeticDivision;
 };
 
 /** Collection of CL unary element-wise functions */
@@ -80,9 +81,9 @@ struct CLFusedLayerTypes
     using ConvolutionLayer          = CLConvolutionLayer;
     using DepthwiseConvolutionLayer = CLDepthwiseConvolutionLayer;
     using FuseBatchNormalization    = CLFuseBatchNormalization;
+    using GEMMConvolutionLayer      = CLGEMMConvolutionLayer;
 };
 
-// TODO (isagot01): Remove once we support heterogeneous scheduling at function level
 /** Wrapper for the CPP Function in the OpenCL backend **/
 class CPPWrapperFunction : public IFunction
 {
@@ -143,7 +144,7 @@ std::unique_ptr<IFunction> create_detection_output_layer<CPPDetectionOutputLayer
     ARM_COMPUTE_ERROR_ON(output == nullptr);
 
     // Create and configure function
-    auto func = support::cpp14::make_unique<CPPDetectionOutputLayer>();
+    auto func = std::make_unique<CPPDetectionOutputLayer>();
     func->configure(input0, input1, input2, output, detect_info);
 
     // Log info
@@ -159,7 +160,7 @@ std::unique_ptr<IFunction> create_detection_output_layer<CPPDetectionOutputLayer
                                << " DetectionOutputLayer info: " << detect_info
                                << std::endl);
 
-    auto wrap_function = support::cpp14::make_unique<CPPWrapperFunction>();
+    auto wrap_function = std::make_unique<CPPWrapperFunction>();
 
     wrap_function->register_function(std::move(func));
     wrap_function->register_tensor(input0);
@@ -167,7 +168,7 @@ std::unique_ptr<IFunction> create_detection_output_layer<CPPDetectionOutputLayer
     wrap_function->register_tensor(input2);
     wrap_function->register_tensor(output);
 
-    return RETURN_UNIQUE_PTR(wrap_function);
+    return std::move(wrap_function);
 }
 template <>
 std::unique_ptr<IFunction> create_detection_post_process_layer<CPPDetectionPostProcessLayer, CLTargetInfo>(DetectionPostProcessLayerNode &node)
@@ -193,7 +194,7 @@ std::unique_ptr<IFunction> create_detection_post_process_layer<CPPDetectionPostP
     ARM_COMPUTE_ERROR_ON(output3 == nullptr);
 
     // Create and configure function
-    auto func = support::cpp14::make_unique<CPPDetectionPostProcessLayer>();
+    auto func = std::make_unique<CPPDetectionPostProcessLayer>();
     func->configure(input0, input1, input2, output0, output1, output2, output3, detect_info);
 
     // Log info
@@ -212,7 +213,7 @@ std::unique_ptr<IFunction> create_detection_post_process_layer<CPPDetectionPostP
                                << " DetectionPostProcessLayer info: " << detect_info
                                << std::endl);
 
-    auto wrap_function = support::cpp14::make_unique<CPPWrapperFunction>();
+    auto wrap_function = std::make_unique<CPPWrapperFunction>();
 
     wrap_function->register_function(std::move(func));
     wrap_function->register_tensor(input0);
@@ -223,7 +224,7 @@ std::unique_ptr<IFunction> create_detection_post_process_layer<CPPDetectionPostP
     wrap_function->register_tensor(output2);
     wrap_function->register_tensor(output3);
 
-    return RETURN_UNIQUE_PTR(wrap_function);
+    return std::move(wrap_function);
 }
 } // namespace detail
 
@@ -273,6 +274,8 @@ std::unique_ptr<IFunction> CLFunctionFactory::create(INode *node, GraphContext &
             return detail::create_fully_connected_layer<CLFullyConnectedLayer, CLTargetInfo>(*polymorphic_downcast<FullyConnectedLayerNode *>(node), ctx);
         case NodeType::FusedConvolutionBatchNormalizationLayer:
             return detail::create_fused_convolution_batch_normalization_layer<CLFusedLayerTypes, CLTargetInfo>(*polymorphic_downcast<FusedConvolutionBatchNormalizationNode *>(node), ctx);
+        case NodeType::FusedConvolutionWithPostOp:
+            return detail::create_fused_convolution_with_post_op<CLFusedLayerTypes, CLTargetInfo>(*polymorphic_downcast<FusedConvolutionWithPostOpNode *>(node), ctx);
         case NodeType::FusedDepthwiseConvolutionBatchNormalizationLayer:
             return detail::create_fused_depthwise_convolution_batch_normalization_layer<CLFusedLayerTypes, CLTargetInfo>(*polymorphic_downcast<FusedDepthwiseConvolutionBatchNormalizationNode *>(node), ctx);
         case NodeType::GenerateProposalsLayer:
@@ -315,10 +318,8 @@ std::unique_ptr<IFunction> CLFunctionFactory::create(INode *node, GraphContext &
             return detail::create_stack_layer<CLStackLayer, CLTargetInfo>(*polymorphic_downcast<StackLayerNode *>(node));
         case NodeType::StridedSliceLayer:
             return detail::create_strided_slice_layer<CLStridedSlice, CLTargetInfo>(*polymorphic_downcast<StridedSliceLayerNode *>(node));
-        case NodeType::UpsampleLayer:
-            return detail::create_upsample_layer<CLUpsampleLayer, CLTargetInfo>(*polymorphic_downcast<UpsampleLayerNode *>(node), ctx);
-        case NodeType::YOLOLayer:
-            return detail::create_yolo_layer<CLYOLOLayer, CLTargetInfo>(*polymorphic_downcast<YOLOLayerNode *>(node), ctx);
+        case NodeType::FusedConvolutionBatchNormalizationLayerWithPostOpsLayer:
+            return detail::create_fused_convolution_batch_normalization_with_post_op<CLFusedLayerTypes, CLTargetInfo>(*polymorphic_downcast<FusedConvolutionBatchNormalizationWithPostOpsNode *>(node), ctx);
         default:
             return nullptr;
     }

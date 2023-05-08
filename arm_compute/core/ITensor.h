@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -32,7 +32,7 @@ namespace arm_compute
 {
 class Coordinates;
 
-/** Interface for NEON tensor */
+/** Interface for CPU tensor */
 class ITensor
 {
 public:
@@ -90,6 +90,8 @@ public:
     bool is_used() const;
     /** Marks a tensor as unused */
     void mark_as_unused() const;
+    /** Marks a tensor as used */
+    void mark_as_used() const;
 
 private:
     mutable bool _is_used = { true }; /**< Flag that marks if the tensor is used or not */

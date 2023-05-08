@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,28 +22,30 @@
  * IN THE SOFTWARE.
  */
 #pragma once
-#ifdef __ARM_FEATURE_SVE
 
+#ifdef ARM_COMPUTE_ENABLE_SVE
 #include "../std_transforms_sve.hpp"
+#include "../performance_parameters.hpp"
 
 #define ARGLIST  \
-   unsigned int, const unsigned int *, \
-   IndirectInputArg<float>, \
-   size_t, size_t, \
-   const float *, \
-   IndirectOutputArg<float>, \
-   const float *, Activation, bool
+    unsigned int, const unsigned int *, \
+    IndirectInputArg<float>, \
+    size_t, size_t, \
+    const float *, \
+    IndirectOutputArg<float>, \
+    const float *, Activation, bool
 
 namespace arm_gemm
 {
-
 // Actual kernel implementations
 void sve_hybrid_fp32_mla_6x4VL( ARGLIST );
+void sve_hybrid_fp32_mla_6x4VL_a64fx( ARGLIST );
 
 class cls_sve_hybrid_fp32_mla_6x4VL
 {
 public:
-    typedef float operand_type;
+    typedef float lhs_operand_type;
+    typedef float rhs_operand_type;
     typedef float result_type;
 
     typedef void (*kern_type)( ARGLIST );
@@ -69,17 +71,39 @@ public:
         return true;
     }
 
-    StdTransformsSVE<operand_type, result_type, 6, 4, 1> transforms = {};
+    StdTransformsSVE<rhs_operand_type, result_type, 6, 4, 1> transforms = {};
+    template<typename T>
+    static inline PerformanceParameters get_performance_parameters(const CPUInfo *ci)
+    {
+
+        if (std::is_same<T, float>::value) {
+            switch (ci->get_cpu_model()) {
+                case CPUModel::V1:
+                    return { 15.65 };
+                default:
+                    return { 6.667 };
+            }
+        }
+
+        return { 1.0 };
+    }
 
     // Default to the generic kernel
     kern_type kernel=sve_hybrid_fp32_mla_6x4VL;
-
-    cls_sve_hybrid_fp32_mla_6x4VL(const CPUInfo *)
+    cls_sve_hybrid_fp32_mla_6x4VL(const CPUInfo *ci)
     {
+        switch(ci->get_cpu_model()) {
+            default:
+                break;
+            case CPUModel::A64FX:
+                kernel=sve_hybrid_fp32_mla_6x4VL_a64fx;
+                break;
+        }
     }
 };
 
 } // namespace arm_gemm
 
 #undef ARGLIST
-#endif // __ARM_FEATURE_SVE
+
+#endif // ARM_COMPUTE_ENABLE_SVE

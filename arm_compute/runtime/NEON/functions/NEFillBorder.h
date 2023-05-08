@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -39,7 +39,16 @@ class NEFillBorderKernel;
 class NEFillBorder : public IFunction
 {
 public:
+    NEFillBorder();
     /** Initialize the function's source, destination and border_mode.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src            |dst            |
+     * |:--------------|:--------------|
+     * |All            |All            |
      *
      * @note This function fills the borders within the XY-planes.
      *

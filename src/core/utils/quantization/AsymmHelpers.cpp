@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -61,12 +61,6 @@ Status calculate_quantized_multiplier_less_than_one(float    multiplier,
     ARM_COMPUTE_RETURN_ERROR_ON(right_shift == nullptr);
     ARM_COMPUTE_RETURN_ERROR_ON(multiplier < -internal_epsilon);
     ARM_COMPUTE_RETURN_ERROR_ON(multiplier > 1.0f + internal_epsilon);
-    if(std::fabs(0.0f - multiplier) < internal_epsilon)
-    {
-        *quant_multiplier = 0;
-        *right_shift      = 0;
-        return Status{};
-    }
 
     int          shift_exp = 0;
     const double q         = std::frexp(multiplier, &shift_exp);
@@ -185,15 +179,14 @@ std::pair<int, int> get_min_max_values_from_quantized_data_type(DataType data_ty
 void compute_quantized_multipliers_and_shifts(const ITensorInfo *input,
                                               const ITensorInfo *weights,
                                               const ITensorInfo *output,
-                                              unsigned int       idx_ofms,
                                               int32_t           *output_multipliers_ptr,
                                               int32_t           *output_shifts_ptr)
 {
-    const unsigned int num_filters = is_data_type_quantized_per_channel(weights->data_type()) ? weights->dimension(idx_ofms) : 1;
-
     const UniformQuantizationInfo iq_info = input->quantization_info().uniform();
     const QuantizationInfo        wq_info = weights->quantization_info();
     const UniformQuantizationInfo oq_info = output->quantization_info().uniform();
+
+    const unsigned int num_filters = wq_info.scale().size();
 
     for(unsigned int i = 0; i < num_filters; ++i)
     {
@@ -213,7 +206,9 @@ int32_t saturating_rounding_doubling_highmul(int32_t a, int32_t b)
     int64_t a_64(a);
     int64_t b_64(b);
     int64_t ab_64               = a_64 * b_64;
-    bool    is_positive_or_zero = a == 0 || b == 0 || (std::signbit(a) == std::signbit(b));
+    const bool  is_positive_or_zero =
+        a == 0 || b == 0 ||
+        (std::signbit(static_cast<double>(a)) == std::signbit(static_cast<double>(b)));
     int32_t nudge               = is_positive_or_zero ? (1 << 30) : (1 - (1 << 30));
     int32_t ab_x2_high32        = static_cast<int32_t>((ab_64 + nudge) / (1ll << 31));
     return overflow ? std::numeric_limits<int32_t>::max() : ab_x2_high32;
