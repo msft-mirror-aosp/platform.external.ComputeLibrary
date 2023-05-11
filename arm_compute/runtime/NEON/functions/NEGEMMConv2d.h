@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,21 +27,20 @@
 #include "arm_compute/runtime/FunctionDescriptors.h"
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/IMemoryManager.h"
-#include "arm_compute/runtime/NEON/functions/NEActivationLayer.h"
-#include "arm_compute/runtime/NEON/functions/NEGEMMAssemblyDispatch.h"
-#include "arm_compute/runtime/NEON/functions/NEPermute.h"
-#include "arm_compute/runtime/Tensor.h"
 
 #include <memory>
+
 namespace arm_compute
 {
 // Forward declarations
 class ITensor;
-/** Basic function to compute the convolution layer. This function calls the following NEON kernels/functions:
+class ITensorInfo;
+
+/** Basic function to compute the convolution layer. This function calls the following kernels/functions:
  *
  * Supports only NHWC data layout
  *
- * -# @ref NEGEMMAssemblyDispatch
+ * -# @ref cpu::CpuGemmAssemblyDispatch
  * -# @ref NEActivationLayer, in case activation cannot be fused in the assembly dispatch
  *
  * Weights are transformed from OHWI to HWIO format using the following kernels:
@@ -60,7 +59,21 @@ public:
     NEGEMMConv2d &operator=(const NEGEMMConv2d &) = delete;
     /** Default move assignment operator */
     NEGEMMConv2d &operator=(NEGEMMConv2d &&) = default;
+    /** Destructor */
+    ~NEGEMMConv2d();
     /** Set the input and output tensors.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src0           |src1           |src2           |dst            |
+     * |:--------------|:--------------|:--------------|:--------------|
+     * |QASYMM8        |QASYMM8        |S32            |QASYMM8        |
+     * |QASYMM8_SIGNED |QASYMM8_SIGNED |S32            |QASYMM8_SIGNED |
+     * |F16            |F16            |F16            |F16            |
+     * |F32            |F32            |F32            |F32            |
+     * |BFLOAT16       |BFLOAT16       |BFLOAT16       |BFLOAT16       |
      *
      * @param[in]  input   Source tensor. 3 lower dimensions represent a single input [width, height, IFM],
      *                     while every optional dimension from 4 and above represent a batch of inputs.
@@ -96,13 +109,8 @@ public:
     void prepare() override;
 
 private:
-    NEGEMMAssemblyDispatch _gemm_asm_func;
-    NEActivationLayer      _activation_func;
-    NEPermute              _weights_permute_func;
-    const ITensor         *_original_weights;
-    Tensor                 _permuted_weights;
-    bool                   _is_prepared;
-    bool                   _run_activation;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_NEGEMMCONV2D_H */

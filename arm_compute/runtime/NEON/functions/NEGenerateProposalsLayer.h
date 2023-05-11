@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,7 +30,6 @@
 #include "arm_compute/runtime/IFunction.h"
 #include "arm_compute/runtime/MemoryGroup.h"
 #include "arm_compute/runtime/NEON/functions/NEBoundingBoxTransform.h"
-#include "arm_compute/runtime/NEON/functions/NEComputeAllAnchors.h"
 #include "arm_compute/runtime/NEON/functions/NEDequantizationLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEPadLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEPermute.h"
@@ -41,17 +40,18 @@
 namespace arm_compute
 {
 class ITensor;
+class NEComputeAllAnchorsKernel;
 
 /** Basic function to generate proposals for a RPN (Region Proposal Network)
  *
- * This function calls the following Neon kernels:
- * -# @ref NEComputeAllAnchors
+ * This function calls the following Arm(R) Neon(TM) layers/kernels:
+ * -# @ref NEComputeAllAnchorsKernel
  * -# @ref NEPermute x 2
  * -# @ref NEReshapeLayer x 2
  * -# @ref NEBoundingBoxTransform
  * -# @ref NEPadLayerKernel
- * -# @ref NEDequantizationLayerKernel x 2
- * -# @ref NEQuantizationLayerKernel
+ * -# @ref NEDequantizationLayer x 2
+ * -# @ref NEQuantizationLayer
  * And the following CPP kernels:
  * -# @ref CPPBoxWithNonMaximaSuppressionLimit
  */
@@ -71,6 +71,16 @@ public:
     ~NEGenerateProposalsLayer();
 
     /** Set the input and output tensors.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src0           |src1               |src2     |dst            |
+     * |:--------------|:------------------|:--------|:--------------|
+     * |F16            |F16                |F16      |F16            |
+     * |F32            |F32                |F32      |F32            |
+     * |QASYMM8        |QSYMM8             |QSYMM16  |QASYMM8        |
      *
      * @param[in]  scores              Scores from convolution layer of size (W, H, A), where H and W are the height and width of the feature map, and A is the number of anchors.
      *                                 Data types supported: QASYMM8/F16/F32
@@ -113,17 +123,17 @@ private:
     // Memory group manager
     MemoryGroup _memory_group;
 
-    // Neon kernels
-    NEPermute              _permute_deltas;
-    NEReshapeLayer         _flatten_deltas;
-    NEPermute              _permute_scores;
-    NEReshapeLayer         _flatten_scores;
-    NEComputeAllAnchors    _compute_anchors;
-    NEBoundingBoxTransform _bounding_box;
-    NEPadLayer             _pad;
-    NEDequantizationLayer  _dequantize_anchors;
-    NEDequantizationLayer  _dequantize_deltas;
-    NEQuantizationLayer    _quantize_all_proposals;
+    // kernels/layers
+    NEPermute                                  _permute_deltas;
+    NEReshapeLayer                             _flatten_deltas;
+    NEPermute                                  _permute_scores;
+    NEReshapeLayer                             _flatten_scores;
+    std::unique_ptr<NEComputeAllAnchorsKernel> _compute_anchors;
+    NEBoundingBoxTransform                     _bounding_box;
+    NEPadLayer                                 _pad;
+    NEDequantizationLayer                      _dequantize_anchors;
+    NEDequantizationLayer                      _dequantize_deltas;
+    NEQuantizationLayer                        _quantize_all_proposals;
 
     // CPP functions
     CPPBoxWithNonMaximaSuppressionLimit _cpp_nms;
