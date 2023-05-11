@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -53,10 +53,11 @@ public:
 
     template <typename...>
     void setup(TensorShape input_shape, int stride_x, int stride_y, int pad_x, int pad_y, unsigned int kernel_size, unsigned int num_kernels,
-               DataType data_type, QuantizationInfo quantization_info, ActivationLayerInfo act_info, DataLayout data_layout)
+               DataType data_type, QuantizationInfo quantization_info, ActivationLayerInfo act_info, DataLayout data_layout, bool mixed_layout = false)
     {
         _quantization_info = quantization_info;
         _data_type         = data_type;
+        _mixed_layout      = mixed_layout;
 
         TensorShape         weights_shape(kernel_size, kernel_size, input_shape.z(), num_kernels);
         const TensorShape   bias_shape(num_kernels);
@@ -89,6 +90,21 @@ public:
     }
 
 protected:
+    void mix_layout(FunctionType &layer, TensorType &src, TensorType &dst)
+    {
+        DataLayout data_layout = src.info()->data_layout();
+        // Test Multi DataLayout graph cases, when the data layout changes after configure
+        src.info()->set_data_layout(data_layout == DataLayout::NCHW ? DataLayout::NHWC : DataLayout::NCHW);
+        dst.info()->set_data_layout(data_layout == DataLayout::NCHW ? DataLayout::NHWC : DataLayout::NCHW);
+
+        // Compute Convolution function
+        layer.run();
+
+        // Reinstating original data layout for the test suite to properly check the values
+        src.info()->set_data_layout(data_layout);
+        dst.info()->set_data_layout(data_layout);
+    }
+
     template <typename U>
     void fill(U &&tensor, int i)
     {
@@ -96,21 +112,26 @@ protected:
         {
             case DataType::QASYMM8:
             {
-                std::uniform_int_distribution<uint8_t> distribution(0, 50);
+                std::uniform_int_distribution<uint32_t> distribution(0, 50);
                 library->fill(tensor, distribution, i);
                 break;
             }
             case DataType::QASYMM8_SIGNED:
             {
                 // Use small input range to avoid all the test results being saturated at the end.
-                std::uniform_int_distribution<int8_t> distribution(-25, 25);
+                std::uniform_int_distribution<int32_t> distribution(-25, 25);
                 library->fill(tensor, distribution, i);
                 break;
             }
             case DataType::F16:
+            {
+                arm_compute::utils::uniform_real_distribution_16bit<half> distribution{ -1.0f, 1.0f };
+                library->fill(tensor, distribution, i);
+                break;
+            }
             case DataType::F32:
             {
-                std::uniform_real_distribution<> distribution(-1.f, 1.f);
+                std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
                 library->fill(tensor, distribution, i);
                 break;
             }
@@ -141,14 +162,17 @@ protected:
         TensorType bias    = create_tensor<TensorType>(bias_shape, bias_data_type, 1, quantization_info);
         TensorType dst     = create_tensor<TensorType>(output_shape, data_type, 1, quantization_info, data_layout);
 
+        add_padding_x({ &src, &bias, &dst }, data_layout);
+        add_padding_x({ &weights }, data_layout, input_shape[0] % 4 == 0); // Don't add left padding if cl image will be used
+
         // Create and configure function
         FunctionType conv;
         conv.configure(&src, &weights, &bias, &dst, info, act_info);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(bias.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(bias.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
 
         // Allocate tensors
         src.allocator()->allocate();
@@ -156,18 +180,25 @@ protected:
         bias.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!bias.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!bias.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src), 0);
         fill(AccessorType(weights), 1);
         fill(AccessorType(bias), 2);
 
-        // Compute NEConvolutionLayer function
-        conv.run();
+        if(_mixed_layout)
+        {
+            mix_layout(conv, src, dst);
+        }
+        else
+        {
+            // Compute Convolution function
+            conv.run();
+        }
 
         return dst;
     }
@@ -192,9 +223,10 @@ protected:
     SimpleTensor<T>  _reference{};
     QuantizationInfo _quantization_info{};
     DataType         _data_type{};
+    bool             _mixed_layout{ false };
 };
 
-template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T, bool mixed_layout = false>
 class DirectConvolutionValidationFixture : public DirectConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>
 {
 public:
@@ -203,11 +235,11 @@ public:
                DataLayout data_layout)
     {
         DirectConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(input_shape, stride_x, stride_y, pad_x, pad_y, kernel_size, num_kernels, data_type, QuantizationInfo(),
-                                                                                                    act_info, data_layout);
+                                                                                                    act_info, data_layout, mixed_layout);
     }
 };
 
-template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+template <typename TensorType, typename AccessorType, typename FunctionType, typename T, bool mixed_layout = false>
 class DirectConvolutionValidationQuantizedFixture : public DirectConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>
 {
 public:
@@ -216,7 +248,7 @@ public:
                ActivationLayerInfo act_info, DataLayout data_layout)
     {
         DirectConvolutionValidationGenericFixture<TensorType, AccessorType, FunctionType, T>::setup(input_shape, stride_x, stride_y, pad_x, pad_y, kernel_size, num_kernels, data_type, quantization_info,
-                                                                                                    act_info, data_layout);
+                                                                                                    act_info, data_layout, mixed_layout);
     }
 };
 

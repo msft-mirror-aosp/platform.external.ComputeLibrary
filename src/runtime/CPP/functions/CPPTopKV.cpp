@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,13 +24,16 @@
 #include "arm_compute/runtime/CPP/functions/CPPTopKV.h"
 
 #include "arm_compute/core/CPP/kernels/CPPTopKVKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 namespace arm_compute
 {
 void CPPTopKV::configure(const ITensor *predictions, const ITensor *targets, ITensor *output, const unsigned int k)
 {
-    auto kernel = arm_compute::support::cpp14::make_unique<CPPTopKVKernel>();
+    ARM_COMPUTE_LOG_PARAMS(predictions, targets, output, k);
+
+    auto kernel = std::make_unique<CPPTopKVKernel>();
     kernel->configure(predictions, targets, output, k);
     _kernel = std::move(kernel);
 }

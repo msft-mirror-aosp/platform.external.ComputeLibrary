@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -27,15 +27,10 @@
 #include "arm_compute/core/Utils.h"
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/core/utils/quantization/AsymmHelpers.h"
-#include "src/core/CL/kernels/CLDepthConvertLayerKernel.h"
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyNativeKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyReshapedOnlyRHSKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionOutputStageKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpReductionKernel.h"
-#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
 #include "src/core/helpers/AutoConfiguration.h"
+
+#include "src/common/utils/Log.h"
 
 #include <memory>
 
@@ -84,6 +79,10 @@ void CLLSTMLayerQuantized::configure(const CLCompileContext &compile_context, co
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, input_to_input_weights, input_to_forget_weights, input_to_cell_weights, input_to_output_weights,
                                  recurrent_to_input_weights, recurrent_to_forget_weights, recurrent_to_cell_weights, recurrent_to_output_weights,
                                  input_gate_bias, forget_gate_bias, cell_bias, output_gate_bias, cell_state_in, output_state_in, cell_state_out, output_state_out);
+
+    ARM_COMPUTE_LOG_PARAMS(input, input_to_input_weights, input_to_forget_weights, input_to_cell_weights, input_to_output_weights, recurrent_to_input_weights,
+                           recurrent_to_forget_weights, recurrent_to_cell_weights, recurrent_to_output_weights, input_gate_bias, forget_gate_bias, cell_bias, output_gate_bias, cell_state_in, output_state_in, cell_state_out,
+                           output_state_out);
 
     ARM_COMPUTE_ERROR_THROW_ON(CLLSTMLayerQuantized::validate(input->info(), input_to_input_weights->info(), input_to_forget_weights->info(), input_to_cell_weights->info(),
                                                               input_to_output_weights->info(),
@@ -181,7 +180,13 @@ void CLLSTMLayerQuantized::configure(const CLCompileContext &compile_context, co
     quantization::calculate_quantized_multiplier(multiplier, &output_multiplier, &output_shift);
 
     _memory_group.manage(&_output_lowp);
-    _output_stage.configure(compile_context, &_output_highp, &_bias, &_output_lowp, output_multiplier, output_shift);
+
+    GEMMLowpOutputStageInfo info{};
+    info.type                = GEMMLowpOutputStageType::QUANTIZE_DOWN_FIXEDPOINT;
+    info.gemmlowp_multiplier = output_multiplier;
+    info.gemmlowp_shift      = output_shift;
+    info.output_data_type    = DataType::QSYMM16;
+    _output_stage.configure(compile_context, &_output_highp, &_bias, &_output_lowp, info);
     _output_highp.allocator()->allocate();
     _bias.allocator()->allocate();
 
@@ -388,7 +393,12 @@ Status CLLSTMLayerQuantized::validate(const ITensorInfo *input,
     ARM_COMPUTE_RETURN_ON_ERROR(quantization::calculate_quantized_multiplier(multiplier, &output_multiplier, &output_shift));
 
     // _output_stage
-    ARM_COMPUTE_RETURN_ON_ERROR(CLGEMMLowpQuantizeDownInt32ToInt16ScaleByFixedPoint::validate(&output_highp, &bias_concatenated, &output_lowp));
+    GEMMLowpOutputStageInfo info{};
+    info.type                = GEMMLowpOutputStageType::QUANTIZE_DOWN_FIXEDPOINT;
+    info.gemmlowp_multiplier = output_multiplier;
+    info.gemmlowp_shift      = output_shift;
+    info.output_data_type    = DataType::QSYMM16;
+    ARM_COMPUTE_RETURN_ON_ERROR(CLGEMMLowpOutputStage::validate(&output_highp, &bias_concatenated, &output_lowp, info));
 
     TensorInfo input_gate_input;
     TensorInfo forget_gate_input;
