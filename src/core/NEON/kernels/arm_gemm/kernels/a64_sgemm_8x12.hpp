@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,6 +26,9 @@
 #ifdef __aarch64__
 
 #include "../std_transforms_fixed.hpp"
+#include "../performance_parameters.hpp"
+
+#include "../bfloat.hpp"
 
 namespace arm_gemm {
 
@@ -67,19 +70,35 @@ public:
     // Use the standard fixed size transforms.
     StdTransformsFixed<operand_type, result_type, 8, 12> transforms = {};
 
+    template<typename T>
     static PerformanceParameters get_performance_parameters(const CPUInfo *ci) {
-        switch (ci->get_cpu_model()) {
-            case CPUModel::A55r1:
-                return { 3.954, 1.252, 1.141 };
+        if (std::is_same<T, float>::value) {
+            switch (ci->get_cpu_model()) {
+                case CPUModel::A55r1:
+                    return { 3.954, 1.252, 1.141 };
 
-            case CPUModel::A53:
-                return { 2.777, 0.987, 0.898 };
+                case CPUModel::A53:
+                    return { 2.777, 0.987, 0.898 };
 
-            case CPUModel::A73:
-                return { 2.885, 1.429, 1.163 };
+                case CPUModel::A73:
+                    return { 2.885, 1.429, 1.163 };
 
-            default:
-                return { 7.2307, 3.876, 2.932 };
+                case CPUModel::V1:
+                    return { 14.95, 9.95, 5.28 };
+
+                default:
+                    return { 7.2307, 3.876, 2.932 };
+            }
+        }
+
+        if (std::is_same<T, bfloat16>::value) {
+            switch(ci->get_cpu_model()) {
+                case CPUModel::A510:
+                    return { 4.98, 2.27, 3.05 };
+
+                default:
+                    return { 7.99, 5.06, 7.32 };
+            }
         }
     }
 

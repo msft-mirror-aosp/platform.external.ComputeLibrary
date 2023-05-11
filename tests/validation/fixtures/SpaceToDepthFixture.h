@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,6 +24,7 @@
 #ifndef ARM_COMPUTE_TEST_SPACE_TO_DEPTH_LAYER_FIXTURE
 #define ARM_COMPUTE_TEST_SPACE_TO_DEPTH_LAYER_FIXTURE
 
+#include "arm_compute/core/utils/misc/ShapeCalculator.h"
 #include "tests/Globals.h"
 #include "tests/framework/Asserts.h"
 #include "tests/framework/Fixture.h"
@@ -50,7 +51,10 @@ protected:
     template <typename U>
     void fill(U &&tensor, int i)
     {
-        std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
+        static_assert(std::is_floating_point<T>::value || std::is_same<T, half>::value, "Only floating point data types supported.");
+        using DistributionType = typename std::conditional<std::is_same<T, half>::value, arm_compute::utils::uniform_real_distribution_16bit<T>, std::uniform_real_distribution<T>>::type;
+
+        DistributionType distribution{ T(-1.0f), T(1.0f) };
         library->fill(tensor, distribution, i);
     }
     TensorType compute_target(TensorShape input_shape, TensorShape output_shape, const int block_shape,
@@ -66,19 +70,25 @@ protected:
         TensorType input  = create_tensor<TensorType>(input_shape, data_type, 1, QuantizationInfo(), data_layout);
         TensorType output = create_tensor<TensorType>(output_shape, data_type, 1, QuantizationInfo(), data_layout);
 
+        auto calc_out_shape = misc::shape_calculator::compute_space_to_depth_shape(input.info(), block_shape);
+        ARM_COMPUTE_ASSERT(output_shape[0] == calc_out_shape[0]);
+        ARM_COMPUTE_ASSERT(output_shape[1] == calc_out_shape[1]);
+        ARM_COMPUTE_ASSERT(output_shape[2] == calc_out_shape[2]);
+        ARM_COMPUTE_ASSERT(output_shape[3] == calc_out_shape[3]);
+
         // Create and configure function
         FunctionType space_to_depth;
         space_to_depth.configure(&input, &output, block_shape);
 
-        ARM_COMPUTE_EXPECT(input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(output.info()->is_resizable());
 
         // Allocate tensors
         input.allocator()->allocate();
         output.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!output.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(input), 0);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -51,7 +51,6 @@ std::pair<Status, Window> validate_and_configure_window(ITensorInfo *input, ITen
 
     // This kernel doesn't need padding
     Window win = calculate_max_window(*input, Steps(num_elems_processed_per_iteration));
-    output->set_valid_region(ValidRegion(Coordinates(), output->tensor_shape()));
 
     return std::make_pair(Status{}, win);
 }
@@ -83,11 +82,13 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output, c
 CLQLSTMLayerNormalizationKernel::CLQLSTMLayerNormalizationKernel()
     : _input(nullptr), _weight(nullptr), _bias(nullptr), _output(nullptr)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLQLSTMLayerNormalizationKernel::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output, const ICLTensor *weight, const ICLTensor *bias)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, weight, bias, output);
+    auto padding_info = get_padding_info({ input, weight, bias, output });
 
     ARM_COMPUTE_ERROR_THROW_ON(validate_arguments(input->info(), output->info(), weight->info(), bias->info()));
 
@@ -129,6 +130,7 @@ void CLQLSTMLayerNormalizationKernel::configure(const CLCompileContext &compile_
     _config_id += support::cpp11::to_string(input->info()->dimension(0));
     _config_id += "_";
     _config_id += support::cpp11::to_string(input->info()->dimension(1));
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 void CLQLSTMLayerNormalizationKernel::configure(const ICLTensor *input, ICLTensor *output, const ICLTensor *weight, const ICLTensor *bias)

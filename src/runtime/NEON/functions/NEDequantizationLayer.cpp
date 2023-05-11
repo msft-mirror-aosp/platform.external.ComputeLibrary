@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,20 +24,43 @@
 
 #include "arm_compute/runtime/NEON/functions/NEDequantizationLayer.h"
 
-#include "src/core/NEON/kernels/NEDequantizationLayerKernel.h"
-#include "support/MemorySupport.h"
+#include "arm_compute/core/Validate.h"
+#include "arm_compute/runtime/Tensor.h"
+#include "src/cpu/operators/CpuDequantize.h"
 
 namespace arm_compute
 {
+struct NEDequantizationLayer::Impl
+{
+    const ITensor                      *src{ nullptr };
+    ITensor                            *dst{ nullptr };
+    std::unique_ptr<cpu::CpuDequantize> op{ nullptr };
+};
+
+NEDequantizationLayer::NEDequantizationLayer()
+    : _impl(std::make_unique<Impl>())
+{
+}
+NEDequantizationLayer::~NEDequantizationLayer() = default;
+
 void NEDequantizationLayer::configure(const ITensor *input, ITensor *output)
 {
-    auto k = arm_compute::support::cpp14::make_unique<NEDequantizationLayerKernel>();
-    k->configure(input, output);
-    _kernel = std::move(k);
+    _impl->src = input;
+    _impl->dst = output;
+    _impl->op  = std::make_unique<cpu::CpuDequantize>();
+    _impl->op->configure(input->info(), output->info());
 }
 
 Status NEDequantizationLayer::validate(const ITensorInfo *input, const ITensorInfo *output)
 {
-    return NEDequantizationLayerKernel::validate(input, output);
+    return cpu::CpuDequantize::validate(input, output);
+}
+
+void NEDequantizationLayer::run()
+{
+    ITensorPack pack;
+    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
+    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
+    _impl->op->run(pack);
 }
 } // namespace arm_compute

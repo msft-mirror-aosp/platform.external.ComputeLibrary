@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -31,10 +31,9 @@
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "src/core/CL/kernels/CLDeconvolutionLayerUpsampleKernel.h"
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
-#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
-#include "src/core/CL/kernels/CLMemsetKernel.h"
-#include "src/core/CL/kernels/CLWeightsReshapeKernel.h"
 #include "src/core/helpers/AutoConfiguration.h"
+
+#include "src/common/utils/Log.h"
 
 #include <memory>
 #include <tuple>
@@ -75,7 +74,12 @@ Status CLDirectDeconvolutionLayer::validate(const ITensorInfo *input, const ITen
 
     const TensorShape output_shape = compute_deconvolution_output_shape(out_dims, *input, *weights);
 
-    ARM_COMPUTE_RETURN_ERROR_ON_MISMATCHING_DATA_TYPES(input, output, weights);
+    ARM_COMPUTE_RETURN_ERROR_ON_MISMATCHING_DATA_TYPES(input, output);
+
+    if(input->data_type() != weights->data_type())
+    {
+        ARM_COMPUTE_RETURN_ERROR_ON(weights->data_type() != DataType::QSYMM8_PER_CHANNEL || !is_data_type_quantized_asymmetric(input->data_type()));
+    }
 
     if(bias != nullptr)
     {
@@ -118,6 +122,7 @@ void CLDirectDeconvolutionLayer::configure(const CLCompileContext &compile_conte
                                            const WeightsInfo &weights_info)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, weights, output);
+    ARM_COMPUTE_LOG_PARAMS(input, weights, bias, output, info, weights_info);
 
     const unsigned int pad_left   = info.pad_left();
     const unsigned int pad_right  = info.pad_right();
@@ -228,7 +233,6 @@ void CLDirectDeconvolutionLayer::prepare()
         {
             _weights_flipped.allocator()->free();
         }
-
         _is_prepared = true;
     }
 }

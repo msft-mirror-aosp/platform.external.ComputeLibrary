@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,11 +23,31 @@
  */
 #include "arm_compute/runtime/CL/functions/CLFlattenLayer.h"
 
-#include "arm_compute/runtime/CL/CLScheduler.h"
-#include "src/core/CL/kernels/CLFlattenLayerKernel.h"
-#include "support/MemorySupport.h"
+#include "arm_compute/core/CL/CLKernelLibrary.h"
+#include "arm_compute/core/CL/ICLTensor.h"
+#include "arm_compute/core/TensorInfo.h"
+#include "arm_compute/core/Validate.h"
+#include "arm_compute/core/utils/misc/ShapeCalculator.h"
+#include "src/core/CL/ICLKernel.h"
+#include "src/core/helpers/AutoConfiguration.h"
+#include "src/gpu/cl/operators/ClFlatten.h"
 
-using namespace arm_compute;
+namespace arm_compute
+{
+struct CLFlattenLayer::Impl
+{
+    const ICLTensor                   *src{ nullptr };
+    ICLTensor                         *dst{ nullptr };
+    std::unique_ptr<opencl::ClFlatten> op{ nullptr };
+};
+
+CLFlattenLayer::CLFlattenLayer()
+    : _impl(std::make_unique<Impl>())
+{
+}
+CLFlattenLayer::CLFlattenLayer(CLFlattenLayer &&) = default;
+CLFlattenLayer &CLFlattenLayer::operator=(CLFlattenLayer &&) = default;
+CLFlattenLayer::~CLFlattenLayer()                            = default;
 
 void CLFlattenLayer::configure(const ICLTensor *input, ICLTensor *output)
 {
@@ -36,13 +56,31 @@ void CLFlattenLayer::configure(const ICLTensor *input, ICLTensor *output)
 
 void CLFlattenLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output)
 {
-    auto k = arm_compute::support::cpp14::make_unique<CLFlattenLayerKernel>();
-    k->configure(compile_context, input, output);
-    _kernel = std::move(k);
-    CLScheduler::get().tune_kernel_static(*_kernel);
+    ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
+    _impl->src = input;
+    _impl->dst = output;
+    auto_init_if_empty(*output->info(), input->info()->clone()->set_tensor_shape(misc::shape_calculator::compute_flatten_shape(input->info())));
+
+    _impl->op = std::make_unique<opencl::ClFlatten>();
+    _impl->op->configure(compile_context, _impl->src->info(), _impl->dst->info());
 }
 
 Status CLFlattenLayer::validate(const ITensorInfo *input, const ITensorInfo *output)
 {
-    return CLFlattenLayerKernel::validate(input, output);
+    // Checks performed when output is configured
+    if(output->total_size() != 0)
+    {
+        const TensorInfo tensor_info_output = input->clone()->set_tensor_shape(misc::shape_calculator::compute_flatten_shape(input));
+        ARM_COMPUTE_RETURN_ERROR_ON_MISMATCHING_SHAPES(output, &tensor_info_output);
+    }
+    return opencl::ClFlatten::validate(input, output);
 }
+
+void CLFlattenLayer::run()
+{
+    ITensorPack pack;
+    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
+    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
+    _impl->op->run(pack);
+}
+} // namespace arm_compute

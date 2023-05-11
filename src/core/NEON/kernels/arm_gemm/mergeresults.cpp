@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -36,9 +36,13 @@ namespace arm_gemm {
 
 template<unsigned int twidth, unsigned int height, bool sve=false, typename Tin, typename Tout>
 void MergeResults(Tout * out, const Tin * in, int ldc, int y0, int ymax, int x0, int xmax, const Tout *bias, Activation act, bool append) {
+    // NOTE: The following code is disabled to avoid calling get_vector_length(), so templated MergeResults will not
+    // be correct for SVE cases.  This is OK as we have specialisations for all needed SVE cases anyway.
+    //
     // For SVE cases, multiply the width up by the vector length.
     // Use the *input* type to determine this, since this will be what the kernel operated on.
-    const int width = twidth * (sve ? get_vector_length<Tin>() : 1);
+    // const int width = twidth * (sve ? get_vector_length<Tin>() : 1);
+    const int width = twidth;
 
     const int full_y_blocks = (ymax - y0) / height;
     const int y_remainder = (ymax - y0) % height;
@@ -95,6 +99,12 @@ void MergeResults(Tout * out, const Tin * in, int ldc, int y0, int ymax, int x0,
 }
 
 #include "merges/list.hpp"
+
+/* Cortex-A53 8x6 SGEMM kernel uses a templated merge as the optimized merge
+ * generator cannot cope with the width (6) not being a multiple of VL (4). */
+#ifdef __aarch64__
+template void MergeResults<6u, 8u, false, float, float>(float *, float const*, int, int, int, int, int, float const *, Activation, bool);
+#endif
 
 #if defined(__aarch64__) && defined(__ARM_FP16_ARGS)
 template void MergeResults<12u, 8u, false, float, __fp16>(__fp16*, float const*, int, int, int, int, int, __fp16 const*, Activation, bool);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,7 +24,8 @@
 #include "arm_compute/runtime/NEON/functions/NEBitwiseXor.h"
 
 #include "src/core/NEON/kernels/NEBitwiseXorKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 #include <utility>
 
@@ -32,7 +33,8 @@ using namespace arm_compute;
 
 void NEBitwiseXor::configure(const ITensor *input1, const ITensor *input2, ITensor *output)
 {
-    auto k = arm_compute::support::cpp14::make_unique<NEBitwiseXorKernel>();
+    ARM_COMPUTE_LOG_PARAMS(input1, input2, output);
+    auto k = std::make_unique<NEBitwiseXorKernel>();
     k->configure(input1, input2, output);
     _kernel = std::move(k);
 }
