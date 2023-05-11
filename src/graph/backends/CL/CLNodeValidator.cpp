@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,17 +28,7 @@
 
 #include "arm_compute/runtime/CL/CLFunctions.h"
 #include "arm_compute/runtime/CPP/CPPFunctions.h"
-#include "src/core/CL/kernels/CLDepthConvertLayerKernel.h"
-#include "src/core/CL/kernels/CLFillBorderKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyNativeKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyReshapedOnlyRHSKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionOutputStageKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpReductionKernel.h"
-#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
-#include "src/core/CL/kernels/CLIm2ColKernel.h"
-#include "src/core/CL/kernels/CLQLSTMLayerNormalizationKernel.h"
-#include "src/core/CL/kernels/CLWeightsReshapeKernel.h"
+
 #include "support/Cast.h"
 
 using namespace arm_compute::utils::cast;
@@ -56,6 +46,7 @@ struct CLEltwiseLayerFunctions
     using ArithmeticSubtraction   = CLArithmeticSubtraction;
     using PixelWiseMultiplication = CLPixelWiseMultiplication;
     using ElementwiseMax          = CLElementwiseMax;
+    using ArithmeticDivision      = CLArithmeticDivision;
 };
 
 /** Collection of CL unary element-wise functions */
@@ -85,6 +76,8 @@ Status CLNodeValidator::validate(INode *node)
                    CLDirectConvolutionLayer,
                    CLGEMMConvolutionLayer,
                    CLWinogradConvolutionLayer>(*polymorphic_downcast<ConvolutionLayerNode *>(node));
+        case NodeType::FusedConvolutionWithPostOp:
+            return detail::validate_fused_convolution_with_post_op<CLGEMMConvolutionLayer>(*polymorphic_downcast<FusedConvolutionWithPostOpNode *>(node));
         case NodeType::DepthToSpaceLayer:
             return detail::validate_depth_to_space_layer<CLDepthToSpaceLayer>(*polymorphic_downcast<DepthToSpaceLayerNode *>(node));
         case NodeType::DepthwiseConvolutionLayer:
@@ -123,10 +116,6 @@ Status CLNodeValidator::validate(INode *node)
             return detail::validate_slice_layer<CLSlice>(*polymorphic_downcast<SliceLayerNode *>(node));
         case NodeType::StridedSliceLayer:
             return detail::validate_strided_slice_layer<CLStridedSlice>(*polymorphic_downcast<StridedSliceLayerNode *>(node));
-        case NodeType::UpsampleLayer:
-            return detail::validate_upsample_layer<CLUpsampleLayer>(*polymorphic_downcast<UpsampleLayerNode *>(node));
-        case NodeType::YOLOLayer:
-            return detail::validate_yolo_layer<CLYOLOLayer>(*polymorphic_downcast<YOLOLayerNode *>(node));
         case NodeType::EltwiseLayer:
             return detail::validate_eltwise_Layer<CLEltwiseLayerFunctions>(*polymorphic_downcast<EltwiseLayerNode *>(node));
         case NodeType::UnaryEltwiseLayer:

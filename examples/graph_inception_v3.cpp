@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,6 +22,8 @@
  * SOFTWARE.
  */
 #include "arm_compute/graph.h"
+#include "arm_compute/core/Types.h"
+#include "arm_compute/core/Utils.h"
 #include "support/ToolchainSupport.h"
 #include "utils/CommonGraphOptions.h"
 #include "utils/GraphUtils.h"
@@ -62,11 +64,11 @@ public:
         std::string data_path = common_params.data_path;
 
         // Create a preprocessor object
-        std::unique_ptr<IPreprocessor> preprocessor = arm_compute::support::cpp14::make_unique<TFPreproccessor>();
+        std::unique_ptr<IPreprocessor> preprocessor = std::make_unique<TFPreproccessor>();
 
         // Create input descriptor
         const auto        operation_layout = common_params.data_layout;
-        const TensorShape tensor_shape     = permute_shape(TensorShape(299U, 299U, 3U, 1U), DataLayout::NCHW, operation_layout);
+        const TensorShape tensor_shape     = permute_shape(TensorShape(299U, 299U, 3U, common_params.batches), DataLayout::NCHW, operation_layout);
         TensorDescriptor  input_descriptor = TensorDescriptor(tensor_shape, common_params.data_type).set_layout(operation_layout);
 
         // Set weights trained layout
@@ -197,12 +199,13 @@ public:
 
         // Finalize graph
         GraphConfig config;
-        config.num_threads      = common_params.threads;
-        config.use_tuner        = common_params.enable_tuner;
-        config.tuner_mode       = common_params.tuner_mode;
-        config.tuner_file       = common_params.tuner_file;
-        config.convert_to_uint8 = (common_params.data_type == DataType::QASYMM8);
-
+        config.num_threads        = common_params.threads;
+        config.use_tuner          = common_params.enable_tuner;
+        config.tuner_mode         = common_params.tuner_mode;
+        config.tuner_file         = common_params.tuner_file;
+        config.mlgo_file          = common_params.mlgo_file;
+        config.use_synthetic_type = arm_compute::is_data_type_quantized(common_params.data_type);
+        config.synthetic_type     = common_params.data_type;
         graph.finalize(common_params.target, config);
 
         return true;

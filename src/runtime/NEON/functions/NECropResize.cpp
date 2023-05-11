@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,9 +24,9 @@
 #include "arm_compute/runtime/NEON/NEScheduler.h"
 
 #include "arm_compute/runtime/NEON/functions/NECropResize.h"
+#include "arm_compute/runtime/Tensor.h"
+#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NECropKernel.h"
-
-#include "support/MemorySupport.h"
 
 #include <cstddef>
 
@@ -61,6 +61,7 @@ void NECropResize::configure(const ITensor *input, const ITensor *boxes, const I
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
     ARM_COMPUTE_ERROR_THROW_ON(NECropResize::validate(input->info(), boxes->info(), box_ind->info(), output->info(), crop_size, method, extrapolation_value));
+    ARM_COMPUTE_LOG_PARAMS(input, boxes, box_ind, output, crop_size, method, extrapolation_value);
 
     _num_boxes = boxes->info()->tensor_shape()[1];
     TensorShape out_shape(input->info()->tensor_shape()[0], crop_size.x, crop_size.y);
@@ -82,18 +83,18 @@ void NECropResize::configure(const ITensor *input, const ITensor *boxes, const I
 
     for(unsigned int i = 0; i < _num_boxes; ++i)
     {
-        auto       crop_tensor = support::cpp14::make_unique<Tensor>();
+        auto       crop_tensor = std::make_unique<Tensor>();
         TensorInfo crop_result_info(1, DataType::F32);
         crop_result_info.set_data_layout(DataLayout::NHWC);
         crop_tensor->allocator()->init(crop_result_info);
 
-        auto       scale_tensor = support::cpp14::make_unique<Tensor>();
+        auto       scale_tensor = std::make_unique<Tensor>();
         TensorInfo scaled_result_info(out_shape, 1, DataType::F32);
         scaled_result_info.set_data_layout(DataLayout::NHWC);
         scale_tensor->allocator()->init(scaled_result_info);
 
-        auto crop_kernel  = support::cpp14::make_unique<NECropKernel>();
-        auto scale_kernel = support::cpp14::make_unique<NEScale>();
+        auto crop_kernel  = std::make_unique<NECropKernel>();
+        auto scale_kernel = std::make_unique<NEScale>();
         crop_kernel->configure(input, boxes, box_ind, crop_tensor.get(), i, _extrapolation_value);
 
         _crop.emplace_back(std::move(crop_kernel));

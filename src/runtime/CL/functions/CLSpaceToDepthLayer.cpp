@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -30,12 +30,13 @@
 #include "arm_compute/core/Validate.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "src/core/CL/kernels/CLSpaceToDepthLayerKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 namespace arm_compute
 {
 CLSpaceToDepthLayer::CLSpaceToDepthLayer()
-    : _space_to_depth_kernel(support::cpp14::make_unique<CLSpaceToDepthLayerKernel>())
+    : _space_to_depth_kernel(std::make_unique<CLSpaceToDepthLayerKernel>())
 {
 }
 
@@ -48,6 +49,7 @@ void CLSpaceToDepthLayer::configure(const ICLTensor *input, ICLTensor *output, i
 
 void CLSpaceToDepthLayer::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output, int32_t block_shape)
 {
+    ARM_COMPUTE_LOG_PARAMS(input, output, block_shape);
     _space_to_depth_kernel->configure(compile_context, input, output, block_shape);
 }
 
