@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -236,9 +236,6 @@ void NEPadLayerKernel::configure(ITensor *input, ITensor *output, const PaddingL
     Window win = calculate_max_window(*output->info(), Steps());
 
     // The NEPad doesn't need padding so update_window_and_padding() can be skipped
-    Coordinates coord;
-    coord.set_num_dimensions(output->info()->num_dimensions());
-    output->info()->set_valid_region(ValidRegion(coord, output->info()->tensor_shape()));
 
     ICPPKernel::configure(win);
 }
@@ -261,4 +258,13 @@ void NEPadLayerKernel::run(const Window &window, const ThreadInfo &info)
         (this->*_func)(window);
     }
 }
+
+size_t NEPadLayerKernel::get_mws(const CPUInfo &platform, size_t thread_count) const
+{
+    ARM_COMPUTE_UNUSED(thread_count);
+    ARM_COMPUTE_UNUSED(platform);
+    
+    return ICPPKernel::default_mws;
+}
+
 } // namespace arm_compute

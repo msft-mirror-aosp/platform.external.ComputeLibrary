@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -26,7 +26,8 @@
 #include "arm_compute/core/CL/ICLTensor.h"
 #include "arm_compute/core/Types.h"
 #include "src/core/CL/kernels/CLStridedSliceKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 namespace arm_compute
 {
@@ -36,7 +37,8 @@ void CLStridedSlice::configure(const CLCompileContext &compile_context, const IT
                                const Coordinates &starts, const Coordinates &ends, const BiStrides &strides,
                                int32_t begin_mask, int32_t end_mask, int32_t shrink_axis_mask)
 {
-    auto k = arm_compute::support::cpp14::make_unique<CLStridedSliceKernel>();
+    ARM_COMPUTE_LOG_PARAMS(input, output, starts, ends, strides, begin_mask, end_mask, shrink_axis_mask);
+    auto k = std::make_unique<CLStridedSliceKernel>();
     k->configure(compile_context, input, output, starts, ends, strides, begin_mask, end_mask, shrink_axis_mask);
     _kernel = std::move(k);
 }
@@ -58,7 +60,7 @@ struct CLStridedSlice::Impl
 };
 
 CLStridedSlice::CLStridedSlice(CLRuntimeContext *ctx)
-    : _impl(support::cpp14::make_unique<Impl>())
+    : _impl(std::make_unique<Impl>())
 {
     _impl->ctx = ctx;
 }
@@ -83,7 +85,7 @@ void CLStridedSlice::configure(const CLCompileContext &compile_context, const IC
     _impl->src = input;
     _impl->dst = output;
 
-    _impl->op = arm_compute::support::cpp14::make_unique<experimental::CLStridedSlice>();
+    _impl->op = std::make_unique<experimental::CLStridedSlice>();
     _impl->op->configure(compile_context, _impl->src->info(), _impl->dst->info(), starts, ends, strides, begin_mask, end_mask, shrink_axis_mask);
 }
 
