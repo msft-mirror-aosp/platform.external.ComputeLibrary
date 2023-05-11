@@ -1,7 +1,11 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020,2022 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
+
+// The following files are omitted due to technical limitations:
+// Directories : data, include, python
+// Files : LICENSE, README.md, SConscript, SConstruct, Security.md, filelist.json, filedefs.json
 
 /** @file Android.bp
  *  @brief Generation script for building AndroidNN driver.
@@ -43,36 +47,16 @@
  *  @brief All experimental interfaces
  */
 
-/** @dir arm_compute/core/GLES_COMPUTE
- *  @brief OpenGLES backend core: kernels and utilities.
- */
-
-/** @file arm_compute/core/GLES_COMPUTE/GCKernelLibrary.h
- *  @brief Manages all the GLES kernels compilation and caching, provides accessors for the GLES Context.
- */
-
-/** @file arm_compute/core/GLES_COMPUTE/GCKernels.h
- *  @brief Includes all the GLES kernels at once
- */
-
-/** @file arm_compute/core/GLES_COMPUTE/OpenGLES.h
- *  @brief Wrapper to configure the Khronos EGL and OpenGL ES C header
- */
-
-/** @dir arm_compute/core/GLES_COMPUTE/kernels
- *  @brief Folder containing all the GLES kernels
- */
-
 /** @dir src/core/NEON
- *  @brief NEON backend core: kernels and utilities.
+ *  @brief Arm® Neon™ backend core: kernels and utilities.
  */
 
 /** @file src/core/NEON/NEKernels.h
- *  @brief Includes all the NEON kernels at once
+ *  @brief Includes all the Arm® Neon™ kernels at once
  */
 
 /** @dir src/core/NEON/kernels
- *  @brief Folder containing all the NEON kernels
+ *  @brief Folder containing all the Arm® Neon™ kernels
  */
 
 /** @dir arm_compute/core/utils
@@ -95,12 +79,8 @@
  *  @brief OpenCL specific operations
  */
 
-/** @dir arm_compute/graph/backends/GLES
- *  @brief OpenGLES specific operations
- */
-
 /** @dir arm_compute/graph/backends/NEON
- *  @brief NEON specific operations
+ *  @brief Arm® Neon™ specific operations
  */
 
 /** @dir arm_compute/graph/detail
@@ -160,7 +140,7 @@
  */
 
 /** @file arm_compute/runtime/CPP/CPPScheduler.h
- *  @brief Basic pool of threads to execute CPP/NEON code on several cores in parallel.
+ *  @brief Basic pool of threads to execute CPP/Neon code on several cores in parallel.
  */
 
 /** @dir arm_compute/runtime/CPP/functions
@@ -171,32 +151,16 @@
  *  @brief Experimental runtime interface.
  */
 
-/** @dir arm_compute/runtime/GLES_COMPUTE
- *  @brief OpenGLES backend runtime interface.
- */
-
-/** @file arm_compute/runtime/GLES_COMPUTE/GCFunctions.h
- *  @brief Includes all the OpenGLES functions at once
- */
-
-/** @file arm_compute/runtime/GLES_COMPUTE/GCScheduler.h
- *  @brief Interface to enqueue GLES kernels and get/set the GLES CommandQueue.
- */
-
-/** @dir arm_compute/runtime/GLES_COMPUTE/functions
- *  @brief Folder containing all the GLES functions.
- */
-
 /** @dir arm_compute/runtime/NEON
- *  @brief NEON backend runtime interface.
+ *  @brief Arm® Neon™ backend runtime interface.
  */
 
 /** @file arm_compute/runtime/NEON/NEFunctions.h
- *  @brief Includes all the NEON functions at once.
+ *  @brief Includes all the Arm® Neon™ functions at once.
  */
 
 /** @dir arm_compute/runtime/NEON/functions
- *  @brief Folder containing all the NEON functions.
+ *  @brief Folder containing all the Arm® Neon™ functions.
  */
 
 /** @dir arm_compute/runtime/OMP
@@ -221,10 +185,9 @@
  *  @details Examples have the following structure:
  *
  *  -# cl_*.cpp --> OpenCL examples
- *  -# gc_*.cpp --> GLES compute shaders examples
  *  -# graph_*.cpp --> Graph examples
- *  -# neoncl_*.cpp --> NEON / OpenCL interoperability examples
- *  -# neon_*.cpp --> NEON examples
+ *  -# neoncl_*.cpp --> Arm® Neon™ / OpenCL interoperability examples
+ *  -# neon_*.cpp --> Arm® Neon™ examples
  */
 
 /** @dir examples/gemm_tuner
@@ -233,14 +196,6 @@
 
 /** @dir scripts
  *  @brief Utility scripts.
- */
-
-/** @file scripts/caffe_data_extractor.py
- *  @brief Basic script to export weights from Caffe to npy files.
- */
-
-/** @file scripts/tensorflow_data_extractor.py
- *  @brief Basic script to export weights from TensorFlow to npy files.
  */
 
 /** @dir src
@@ -252,11 +207,11 @@
  */
 
 /** @dir src/core/NEON/wrapper
- *  @brief NEON wrapper used to simplify code
+ *  @brief Arm® Neon™ wrapper used to simplify code
  */
 
 /** @file src/core/NEON/wrapper/traits.h
- *  @brief Traits defined on NEON vectors
+ *  @brief Traits defined on Arm® Neon™ vectors
  */
 
 /** @file src/core/NEON/wrapper/wrapper.h
@@ -264,14 +219,14 @@
  */
 
 /** @dir src/core/NEON/wrapper/intrinsics
- *  @brief NEON intrinsics wrappers
+ *  @brief Arm® Neon™ intrinsics wrappers
  */
 
 /** @dir src/core/NEON/wrapper/scalar
  *  @brief Scalar operations
  */
 
-/** @dir src/core/CL/gemm
+/** @dir src/gpu/cl/kernels/gemm
  *  @brief Folder containing all the configuration files for GEMM
  */
 
@@ -295,12 +250,8 @@
  *  @brief OpenCL accessors.
  */
 
-/** @dir tests/GLES_COMPUTE
- *  @brief GLES accessors.
- */
-
 /** @dir tests/NEON
- *  @brief NEON accessors.
+ *  @brief Arm® Neon™ accessors.
  */
 
 /** @dir tests/benchmark
@@ -311,12 +262,8 @@
  *  @brief OpenCL benchmarking tests.
  */
 
-/** @dir tests/benchmark/GLES_COMPUTE
- *  @brief GLES benchmarking tests.
- */
-
 /** @dir tests/benchmark/NEON
- *  @brief NEON benchmarking tests.
+ *  @brief Arm® Neon™ benchmarking tests.
  */
 
 /** @dir tests/benchmark_examples
@@ -347,12 +294,8 @@
  *  @brief C++ validation tests.
  */
 
-/** @dir tests/validation/GLES_COMPUTE
- *  @brief GLES validation tests.
- */
-
 /** @dir tests/validation/NEON
- *  @brief NEON validation tests.
+ *  @brief Arm® Neon™ validation tests.
  */
 
 /** @dir tests/validation/reference
