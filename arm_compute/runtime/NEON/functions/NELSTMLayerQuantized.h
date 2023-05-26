@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -47,10 +47,10 @@ class ITensor;
 
 /** Basic function to run @ref NELSTMLayerQuantized
  *
- * This function calls the following NEON functions/kernels:
+ * This function calls the following functions/kernels:
  *
  * -# @ref NEGEMMLowpMatrixMultiplyCore                          Quantized matrix multiplication core. Accumulators are 32-bit integers
- * -# @ref NEGEMMLowpQuantizeDownInt32ToInt16ScaleByFixedPoint   Convert 32-bit integers into QSYMM16
+ * -# @ref NEGEMMLowpOutputStage                                 Convert 32-bit integers into QSYMM16
  * -# @ref NETranspose                                           Matrix transpose
  * -# @ref NEConcatenateLayer                                    Tensor concatenation
  * -# @ref NEActivationLayer                                     Activation functions (tanh and logistic)
@@ -76,6 +76,14 @@ public:
     /** Default destructor */
     ~NELSTMLayerQuantized();
     /** Initialize function's tensors.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src0 - src8 |src9 - src12 |src13   |src14  |dst0   |dst1   |
+     * |:-----------|:------------|:-------|:------|:------|:------|
+     * |QASYMM8     |S32          |QSYMM16 |QASYMM8|QSYMM16|QASYMM8|
      *
      * @param[in]  input                       Source tensor. Input is a 2D tensor with dimensions [input_size, batch_size]. Data types supported: QASYMM8.
      * @param[in]  input_to_input_weights      2D weights tensor with dimensions [input_size, output_size]. Data type supported: Same as @p input.
@@ -139,30 +147,30 @@ private:
     MemoryGroup _memory_group;
 
     // Functions used
-    NEGEMMLowpMatrixMultiplyCore                        _gemmlowp;
-    NEGEMMLowpQuantizeDownInt32ToInt16ScaleByFixedPoint _output_stage;
-    NETranspose                                         _transpose_weights;
-    NEConcatenateLayer                                  _concat_input_weights;
-    NEConcatenateLayer                                  _concat_recurrent_weights;
-    NEConcatenateLayer                                  _concat_weights;
-    NEConcatenateLayer                                  _concat_inputs;
-    NEConcatenateLayer                                  _concat_bias;
-    NEActivationLayer                                   _sigmoid_forget_gate;
-    NEActivationLayer                                   _sigmoid_input_gate;
-    NEActivationLayer                                   _sigmoid_output_gate;
-    NEActivationLayer                                   _tanh_modulation_gate;
-    NEActivationLayer                                   _tanh_output_state;
-    NEArithmeticAddition                                _add1;
-    NEArithmeticAddition                                _add2;
-    NEPixelWiseMultiplication                           _mul1;
-    NEPixelWiseMultiplication                           _mul2;
-    NEPixelWiseMultiplication                           _mul3;
-    NESlice                                             _slice_input_tensor;
-    NESlice                                             _slice_forget_tensor;
-    NESlice                                             _slice_cell_tensor;
-    NESlice                                             _slice_output_tensor;
-    NEDequantizationLayer                               _dequantize;
-    NEQuantizationLayer                                 _quantize;
+    NEGEMMLowpMatrixMultiplyCore _gemmlowp;
+    NEGEMMLowpOutputStage        _output_stage;
+    NETranspose                  _transpose_weights;
+    NEConcatenateLayer           _concat_input_weights;
+    NEConcatenateLayer           _concat_recurrent_weights;
+    NEConcatenateLayer           _concat_weights;
+    NEConcatenateLayer           _concat_inputs;
+    NEConcatenateLayer           _concat_bias;
+    NEActivationLayer            _sigmoid_forget_gate;
+    NEActivationLayer            _sigmoid_input_gate;
+    NEActivationLayer            _sigmoid_output_gate;
+    NEActivationLayer            _tanh_modulation_gate;
+    NEActivationLayer            _tanh_output_state;
+    NEArithmeticAddition         _add1;
+    NEArithmeticAddition         _add2;
+    NEPixelWiseMultiplication    _mul1;
+    NEPixelWiseMultiplication    _mul2;
+    NEPixelWiseMultiplication    _mul3;
+    NESlice                      _slice_input_tensor;
+    NESlice                      _slice_forget_tensor;
+    NESlice                      _slice_cell_tensor;
+    NESlice                      _slice_output_tensor;
+    NEDequantizationLayer        _dequantize;
+    NEQuantizationLayer          _quantize;
 
     // Tensor pointers
     const ITensor *_input_to_input_weights;

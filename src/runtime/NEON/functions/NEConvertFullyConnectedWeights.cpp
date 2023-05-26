@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,33 +22,46 @@
  * SOFTWARE.
  */
 #include "arm_compute/runtime/NEON/functions/NEConvertFullyConnectedWeights.h"
-#include "src/core/NEON/kernels/NEConvertFullyConnectedWeightsKernel.h"
-#include "support/MemorySupport.h"
+
+#include "arm_compute/core/Validate.h"
+#include "src/cpu/operators/CpuConvertFullyConnectedWeights.h"
 
 namespace arm_compute
 {
-NEConvertFullyConnectedWeights::~NEConvertFullyConnectedWeights() = default;
-
+struct NEConvertFullyConnectedWeights::Impl
+{
+    const ITensor                                        *src{ nullptr };
+    ITensor                                              *dst{ nullptr };
+    std::unique_ptr<cpu::CpuConvertFullyConnectedWeights> op{ nullptr };
+};
 NEConvertFullyConnectedWeights::NEConvertFullyConnectedWeights()
-    : _kernel()
+    : _impl(std::make_unique<Impl>())
 {
 }
+NEConvertFullyConnectedWeights::~NEConvertFullyConnectedWeights() = default;
 
 void NEConvertFullyConnectedWeights::configure(const ITensor *input, ITensor *output, const TensorShape &original_input_shape,
                                                DataLayout data_layout)
 {
-    _kernel = arm_compute::support::cpp14::make_unique<NEConvertFullyConnectedWeightsKernel>();
-    _kernel->configure(input, output, original_input_shape, data_layout);
+    ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
+
+    _impl->src = input;
+    _impl->dst = output;
+    _impl->op  = std::make_unique<cpu::CpuConvertFullyConnectedWeights>();
+    _impl->op->configure(_impl->src->info(), _impl->dst->info(), original_input_shape, data_layout);
 }
 
 Status NEConvertFullyConnectedWeights::validate(const ITensorInfo *input, const ITensorInfo *output, const TensorShape &original_input_shape,
                                                 DataLayout data_layout)
 {
-    return NEConvertFullyConnectedWeightsKernel::validate(input, output, original_input_shape, data_layout);
+    return cpu::CpuConvertFullyConnectedWeights::validate(input, output, original_input_shape, data_layout);
 }
 
 void NEConvertFullyConnectedWeights::run()
 {
-    NEScheduler::get().schedule(_kernel.get(), Window::DimZ);
+    ITensorPack pack;
+    pack.add_tensor(TensorType::ACL_SRC, _impl->src);
+    pack.add_tensor(TensorType::ACL_DST, _impl->dst);
+    _impl->op->run(pack);
 }
 } // namespace arm_compute

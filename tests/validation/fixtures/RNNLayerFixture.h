@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -54,7 +54,10 @@ protected:
     template <typename U>
     void fill(U &&tensor, int i)
     {
-        std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
+        static_assert(std::is_floating_point<T>::value || std::is_same<T, half>::value, "Only floating point data types supported.");
+        using DistributionType = typename std::conditional<std::is_same<T, half>::value, arm_compute::utils::uniform_real_distribution_16bit<T>, std::uniform_real_distribution<T>>::type;
+
+        DistributionType distribution{ T(-1.0f), T(1.0f) };
         library->fill(tensor, distribution, i);
     }
 
@@ -73,12 +76,12 @@ protected:
         FunctionType rnn;
         rnn.configure(&input, &weights, &recurrent_weights, &bias, &hidden_state, &output, info);
 
-        ARM_COMPUTE_EXPECT(input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(recurrent_weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(bias.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(hidden_state.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(recurrent_weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(bias.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(hidden_state.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(output.info()->is_resizable());
 
         // Allocate tensors
         input.allocator()->allocate();
@@ -88,12 +91,12 @@ protected:
         hidden_state.allocator()->allocate();
         output.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!recurrent_weights.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!bias.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!hidden_state.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!recurrent_weights.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!bias.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!hidden_state.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!output.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(input), 0);

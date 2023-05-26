@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,19 +28,6 @@
 
 #include "arm_compute/runtime/CPP/CPPFunctions.h"
 #include "arm_compute/runtime/NEON/NEFunctions.h"
-#include "src/core/NEON/kernels/NEConvertFullyConnectedWeightsKernel.h"
-#include "src/core/NEON/kernels/NEConvertQuantizedSignednessKernel.h"
-#include "src/core/NEON/kernels/NEGEMMInterleave4x4Kernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpMatrixMultiplyKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpOffsetContributionOutputStageKernel.h"
-#include "src/core/NEON/kernels/NEGEMMLowpReductionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMMatrixAdditionKernel.h"
-#include "src/core/NEON/kernels/NEGEMMMatrixMultiplyKernel.h"
-#include "src/core/NEON/kernels/NEGEMMTranspose1xWKernel.h"
-#include "src/core/NEON/kernels/NEQLSTMLayerNormalizationKernel.h"
-#include "src/core/NEON/kernels/NEReshapeLayerKernel.h"
-#include "src/core/NEON/kernels/NEWeightsReshapeKernel.h"
 #include "support/Cast.h"
 
 using namespace arm_compute::utils::cast;
@@ -51,16 +38,17 @@ namespace graph
 {
 namespace backends
 {
-/** Collection of NEON element-wise functions */
+/** Collection of CPU element-wise functions */
 struct NEEltwiseLayerFunctions
 {
     using ArithmeticAddition      = NEArithmeticAddition;
     using ArithmeticSubtraction   = NEArithmeticSubtraction;
     using PixelWiseMultiplication = NEPixelWiseMultiplication;
     using ElementwiseMax          = NEElementwiseMax;
+    using ArithmeticDivision      = NEElementwiseDivision;
 };
 
-/** Collection of NEON unary element-wise functions */
+/** Collection of CPU unary element-wise functions */
 struct NEUnaryEltwiseLayerFunctions
 {
     using ExpLayer = NEExpLayer;
@@ -122,13 +110,9 @@ Status NENodeValidator::validate(INode *node)
         case NodeType::ROIAlignLayer:
             return ARM_COMPUTE_CREATE_ERROR(arm_compute::ErrorCode::RUNTIME_ERROR, "Unsupported operation : ROIAlignLayer");
         case NodeType::SliceLayer:
-            return ARM_COMPUTE_CREATE_ERROR(arm_compute::ErrorCode::RUNTIME_ERROR, "Unsupported operation : SliceLayer");
+            return detail::validate_slice_layer<NESlice>(*polymorphic_downcast<SliceLayerNode *>(node));
         case NodeType::StridedSliceLayer:
             return detail::validate_strided_slice_layer<NEStridedSlice>(*polymorphic_downcast<StridedSliceLayerNode *>(node));
-        case NodeType::UpsampleLayer:
-            return detail::validate_upsample_layer<NEUpsampleLayer>(*polymorphic_downcast<UpsampleLayerNode *>(node));
-        case NodeType::YOLOLayer:
-            return detail::validate_yolo_layer<NEYOLOLayer>(*polymorphic_downcast<YOLOLayerNode *>(node));
         case NodeType::EltwiseLayer:
             return detail::validate_eltwise_Layer<NEEltwiseLayerFunctions>(*polymorphic_downcast<EltwiseLayerNode *>(node));
         case NodeType::UnaryEltwiseLayer:

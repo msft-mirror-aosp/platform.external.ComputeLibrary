@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -137,8 +137,6 @@ public:
      */
     static NodeID add_channel_shuffle_node(Graph &g, NodeParams params, NodeIdxPair input, unsigned int num_groups);
     /** Adds a convolution layer node to the graph
-     *
-     * TODO (COMPMID-1113): Add a graph descriptor for convolution layer node
      *
      * @param[in] g                     Graph to add the node to
      * @param[in] params                Common node parameters
@@ -297,13 +295,15 @@ public:
      * @param[in] bias_nid       (Optional) Node ID of the bias node data. Defaults to EmptyNodeID
      * @param[in] fc_info        (Optional) Fully connected layer metadata
      * @param[in] out_quant_info (Optional) Output quantization info
+     * @param[in] fast_math_hint (Optional) Fast math hint
      *
      * @return Node ID of the created node, EmptyNodeID in case of error
      */
     static NodeID add_fully_connected_layer(Graph &g, NodeParams params, NodeIdxPair input, unsigned int num_outputs,
                                             NodeID weights_nid, NodeID bias_nid = EmptyNodeID,
                                             const FullyConnectedLayerInfo fc_info        = FullyConnectedLayerInfo(),
-                                            const QuantizationInfo       &out_quant_info = QuantizationInfo());
+                                            const QuantizationInfo       &out_quant_info = QuantizationInfo(),
+                                            FastMathHint                  fast_math_hint = FastMathHint::Disabled);
     /** Adds a fully connected layer node to the graph
      *
      * @param[in] g                  Graph to add the layer to
@@ -315,6 +315,7 @@ public:
      * @param[in] fc_info            (Optional) Fully connected layer metadata
      * @param[in] weights_quant_info (Optional) Weights quantization info
      * @param[in] out_quant_info     (Optional) Output quantization info
+     * @param[in] fast_math_hint     (Optional) Fast math hint
      *
      * @return Node ID of the created node, EmptyNodeID in case of error
      */
@@ -322,7 +323,8 @@ public:
                                             ITensorAccessorUPtr weights_accessor = nullptr, ITensorAccessorUPtr bias_accessor = nullptr,
                                             const FullyConnectedLayerInfo fc_info            = FullyConnectedLayerInfo(),
                                             const QuantizationInfo       &weights_quant_info = QuantizationInfo(),
-                                            const QuantizationInfo       &out_quant_info     = QuantizationInfo());
+                                            const QuantizationInfo       &out_quant_info     = QuantizationInfo(),
+                                            FastMathHint                  fast_math_hint     = FastMathHint::Disabled);
     /** Adds a generate proposals layer node to the graph
      *
      * @param[in] g       Graph to add the layer to
@@ -571,28 +573,16 @@ public:
      * @return Node ID of the created node, EmptyNodeID in case of error
      */
     static NodeID add_strided_slice_node(Graph &g, NodeParams params, NodeIdxPair input, Coordinates &starts, Coordinates &ends, BiStrides &strides, StridedSliceLayerInfo info);
-    /** Adds an upsample layer to the graph
-     *
-     * @param[in] g                 Graph to add the node to
-     * @param[in] params            Common node parameters
-     * @param[in] input             Input to the yolo layer node as a NodeID-Index pair
-     * @param[in] info              Upsample layer stride info
-     * @param[in] upsampling_policy Upsampling policy used
-     *
-     * @return Node ID of the created node, EmptyNodeID in case of error
-     */
-    static NodeID add_upsample_node(Graph &g, NodeParams params, NodeIdxPair input, Size2D info, InterpolationPolicy upsampling_policy);
     /** Adds a yolo layer to the graph
      *
-     * @param[in] g           Graph to add the node to
-     * @param[in] params      Common node parameters
-     * @param[in] input       Input to the yolo layer node as a NodeID-Index pair
-     * @param[in] act_info    Activation layer parameters
-     * @param[in] num_classes Number of classes to activate
+     * @param[in] g        Graph to add the node to
+     * @param[in] params   Common node parameters
+     * @param[in] input    Input to the yolo layer node as a NodeID-Index pair
+     * @param[in] act_info Activation layer parameters
      *
      * @return Node ID of the created node, EmptyNodeID in case of error
      */
-    static NodeID add_yolo_node(Graph &g, NodeParams params, NodeIdxPair input, ActivationLayerInfo act_info, int32_t num_classes);
+    static NodeID add_yolo_node(Graph &g, NodeParams params, NodeIdxPair input, ActivationLayerInfo act_info);
 };
 } // namespace graph
 } // namespace arm_compute
