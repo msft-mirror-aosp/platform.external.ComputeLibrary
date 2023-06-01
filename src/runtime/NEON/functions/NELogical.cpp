@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,8 +25,8 @@
 
 #include "arm_compute/runtime/NEON/NEScheduler.h"
 #include "arm_compute/runtime/Tensor.h"
+#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NELogicalKernel.h"
-#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -40,18 +40,18 @@ struct NELogicalAnd::Impl : public LogicalArgs
 {
 };
 NELogicalAnd::NELogicalAnd()
-    : _impl(support::cpp14::make_unique<Impl>())
+    : _impl(std::make_unique<Impl>())
 {
 }
-NELogicalAnd &NELogicalAnd::operator=(NELogicalAnd &&) = default;
-NELogicalAnd::~NELogicalAnd()                          = default;
+NELogicalAnd::~NELogicalAnd() = default;
 
 void NELogicalAnd::configure(const ITensor *input1, const ITensor *input2, ITensor *output)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input1, input2, output);
+    ARM_COMPUTE_LOG_PARAMS(input1, input2, output);
 
-    _impl->kernel = arm_compute::support::cpp14::make_unique<kernels::NELogicalKernel>();
-    _impl->kernel->configure(input1->info(), input2->info(), output->info(), kernels::LogicalOperation::And);
+    _impl->kernel = std::make_unique<kernels::NELogicalKernel>();
+    _impl->kernel->configure(input1->info(), input2->info(), output->info(), LogicalOperation::And);
 
     _impl->pack = ITensorPack();
     _impl->pack.add_tensor(TensorType::ACL_SRC_0, input1);
@@ -61,30 +61,30 @@ void NELogicalAnd::configure(const ITensor *input1, const ITensor *input2, ITens
 
 Status NELogicalAnd::validate(const ITensorInfo *input1, const ITensorInfo *input2, const ITensorInfo *output)
 {
-    return kernels::NELogicalKernel::validate(input1, input2, output, kernels::LogicalOperation::And);
+    return kernels::NELogicalKernel::validate(input1, input2, output, LogicalOperation::And);
 }
 
 void NELogicalAnd::run()
 {
-    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->pack);
+    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->kernel->window(), _impl->pack);
 }
 
 struct NELogicalOr::Impl : public LogicalArgs
 {
 };
 NELogicalOr::NELogicalOr()
-    : _impl(support::cpp14::make_unique<Impl>())
+    : _impl(std::make_unique<Impl>())
 {
 }
-NELogicalOr &NELogicalOr::operator=(NELogicalOr &&) = default;
-NELogicalOr::~NELogicalOr()                         = default;
+NELogicalOr::~NELogicalOr() = default;
 
 void NELogicalOr::configure(const ITensor *input1, const ITensor *input2, ITensor *output)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input1, input2, output);
+    ARM_COMPUTE_LOG_PARAMS(input1, input2, output);
 
-    _impl->kernel = arm_compute::support::cpp14::make_unique<kernels::NELogicalKernel>();
-    _impl->kernel->configure(input1->info(), input2->info(), output->info(), kernels::LogicalOperation::Or);
+    _impl->kernel = std::make_unique<kernels::NELogicalKernel>();
+    _impl->kernel->configure(input1->info(), input2->info(), output->info(), LogicalOperation::Or);
 
     _impl->pack = ITensorPack();
     _impl->pack.add_tensor(TensorType::ACL_SRC_0, input1);
@@ -94,30 +94,30 @@ void NELogicalOr::configure(const ITensor *input1, const ITensor *input2, ITenso
 
 Status NELogicalOr::validate(const ITensorInfo *input1, const ITensorInfo *input2, const ITensorInfo *output)
 {
-    return kernels::NELogicalKernel::validate(input1, input2, output, kernels::LogicalOperation::Or);
+    return kernels::NELogicalKernel::validate(input1, input2, output, LogicalOperation::Or);
 }
 
 void NELogicalOr::run()
 {
-    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->pack);
+    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->kernel->window(), _impl->pack);
 }
 
 struct NELogicalNot::Impl : public LogicalArgs
 {
 };
 NELogicalNot::NELogicalNot()
-    : _impl(support::cpp14::make_unique<Impl>())
+    : _impl(std::make_unique<Impl>())
 {
 }
-NELogicalNot &NELogicalNot::operator=(NELogicalNot &&) = default;
-NELogicalNot::~NELogicalNot()                          = default;
+NELogicalNot::~NELogicalNot() = default;
 
 void NELogicalNot::configure(const ITensor *input, ITensor *output)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
+    ARM_COMPUTE_LOG_PARAMS(input, output);
 
-    _impl->kernel = arm_compute::support::cpp14::make_unique<kernels::NELogicalKernel>();
-    _impl->kernel->configure(input->info(), nullptr, output->info(), kernels::LogicalOperation::Not);
+    _impl->kernel = std::make_unique<kernels::NELogicalKernel>();
+    _impl->kernel->configure(input->info(), nullptr, output->info(), LogicalOperation::Not);
 
     _impl->pack = ITensorPack();
     _impl->pack.add_tensor(TensorType::ACL_SRC_0, input);
@@ -126,11 +126,11 @@ void NELogicalNot::configure(const ITensor *input, ITensor *output)
 
 Status NELogicalNot::validate(const ITensorInfo *input, const ITensorInfo *output)
 {
-    return kernels::NELogicalKernel::validate(input, nullptr, output, kernels::LogicalOperation::Not);
+    return kernels::NELogicalKernel::validate(input, nullptr, output, LogicalOperation::Not);
 }
 
 void NELogicalNot::run()
 {
-    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->pack);
+    NEScheduler::get().schedule_op(_impl->kernel.get(), Window::DimY, _impl->kernel->window(), _impl->pack);
 }
 } // namespace arm_compute

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -36,6 +36,7 @@ namespace arm_compute
 CLDeconvolutionLayerUpsampleKernel::CLDeconvolutionLayerUpsampleKernel()
     : _input(nullptr), _output(nullptr), _info(), _data_layout(DataLayout::UNKNOWN)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 Status CLDeconvolutionLayerUpsampleKernel::validate(const ITensorInfo *input, const ITensorInfo *output,
@@ -79,6 +80,7 @@ void CLDeconvolutionLayerUpsampleKernel::configure(const CLCompileContext &compi
 
     // Perform validation step
     ARM_COMPUTE_ERROR_THROW_ON(CLDeconvolutionLayerUpsampleKernel::validate(input->info(), output->info(), info));
+    auto padding_info = get_padding_info({ input, output });
 
     _input       = input;
     _output      = output;
@@ -95,9 +97,9 @@ void CLDeconvolutionLayerUpsampleKernel::configure(const CLCompileContext &compi
     // Configure kernel window
     Window                 win = calculate_max_window(*output->info(), Steps(num_elems_processed_per_iteration));
     AccessWindowHorizontal output_access(output->info(), 0, num_elems_processed_per_iteration);
-    output_access.set_valid_region(win, ValidRegion(Coordinates(), output->info()->tensor_shape()));
 
     ICLKernel::configure_internal(win);
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 void CLDeconvolutionLayerUpsampleKernel::run(const Window &window, cl::CommandQueue &queue)

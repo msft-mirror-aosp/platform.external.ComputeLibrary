@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,7 +25,7 @@
 #define ARM_COMPUTE_NELSTMLAYER_H
 
 #include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/NEON/functions/NEArithmeticAddition.h"
+#include "arm_compute/runtime/NEON/functions/NEActivationLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEArithmeticAddition.h"
 #include "arm_compute/runtime/NEON/functions/NEArithmeticSubtraction.h"
 #include "arm_compute/runtime/NEON/functions/NEConcatenateLayer.h"
@@ -59,6 +59,15 @@ public:
     /** Default destructor */
     ~NELSTMLayer();
     /** Initialize function's tensors.
+     *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src0 - src13 | dst0 - dst3 |
+     * |:------------|:------------|
+     * |F16          |F16          |
+     * |F32          |F32          |
      *
      * @param[in]  input                       Source tensor. Input is a 2D tensor with dimensions [input_size, batch_size]. Data types supported: F16/F32.
      * @param[in]  input_to_forget_weights     2D weights tensor with dimensions [input_size, num_units]. Data type supported: Same as @p input.

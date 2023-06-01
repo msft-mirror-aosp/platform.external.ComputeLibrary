@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,9 +23,9 @@
  */
 #include "arm_compute/runtime/NEON/functions/NEROIAlignLayer.h"
 
+#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEFillBorderKernel.h"
 #include "src/core/NEON/kernels/NEROIAlignLayerKernel.h"
-#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
@@ -38,8 +38,10 @@ Status NEROIAlignLayer::validate(const ITensorInfo *input, const ITensorInfo *ro
 
 void NEROIAlignLayer::configure(const ITensor *input, const ITensor *rois, ITensor *output, const ROIPoolingLayerInfo &pool_info)
 {
+    ARM_COMPUTE_LOG_PARAMS(input, rois, output, pool_info);
+
     // Configure ROI pooling kernel
-    auto k = arm_compute::support::cpp14::make_unique<NEROIAlignLayerKernel>();
+    auto k = std::make_unique<NEROIAlignLayerKernel>();
     k->configure(input, rois, output, pool_info);
     _kernel = std::move(k);
 }
