@@ -68,17 +68,14 @@ arm_compute_library_defaults {
             "-Wno-inline-asm",
             "-integrated-as",
             "-Wno-implicit-fallthrough"
-       ],
-       rtti: true,
-       openmp: true,
+    ],
+    rtti: true,
 }
 
 cc_library_static {
     name: "arm_compute_library",
-    defaults: [
-        "neuralnetworks_cl_defaults",
-        "acl-default-cppflags"
-    ],
+    defaults: ["acl-default-cppflags"],
+    proprietary: true,
     local_include_dirs: ["src/core/common",
                          "src/core/helpers",
                          "src/core/NEON/kernels/assembly",
@@ -890,7 +887,7 @@ cc_library_static {
         "utils/CommonGraphOptions.cpp",
         "utils/GraphUtils.cpp",
         "utils/Utils.cpp",
-        "src/graph/TypeLoader.cpp",
+        
     ],
 	enabled : false,
     arch: {
@@ -900,6 +897,7 @@ cc_library_static {
                 "src/core/NEON/kernels/arm_gemm/kernels/a32_sgemm_8x6/a53.cpp",
                 "src/core/NEON/kernels/arm_gemm/kernels/a32_sgemm_8x6/a55r1.cpp",
                 "src/core/NEON/kernels/arm_gemm/kernels/a32_sgemm_8x6/generic.cpp",
+                
             ],
         },
         arm64: {
