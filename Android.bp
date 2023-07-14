@@ -892,8 +892,10 @@ cc_library_static {
         "utils/Utils.cpp",
         "src/graph/TypeLoader.cpp",
     ],
+	enabled : false,
     arch: {
         arm: {
+            enabled : true,
             srcs: [
                 "src/core/NEON/kernels/arm_gemm/kernels/a32_sgemm_8x6/a53.cpp",
                 "src/core/NEON/kernels/arm_gemm/kernels/a32_sgemm_8x6/a55r1.cpp",
@@ -901,6 +903,7 @@ cc_library_static {
             ],
         },
         arm64: {
+            enabled : true,
             srcs: [
                 "src/core/NEON/kernels/arm_conv/depthwise/interleaves/a64_s8q_3x3_dot.cpp",
                 "src/core/NEON/kernels/arm_conv/depthwise/interleaves/a64_u8q_3x3_dot.cpp",
