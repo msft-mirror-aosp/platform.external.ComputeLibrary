@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -41,7 +41,8 @@ enum class CLVersion
     CL10,   /* the OpenCL 1.0 */
     CL11,   /* the OpenCL 1.1 */
     CL12,   /* the OpenCL 1.2 */
-    CL20,   /* the OpenCL 2.0 and above */
+    CL20,   /* the OpenCL 2.x */
+    CL30,   /* the OpenCL 3.x */
     UNKNOWN /* unkown version */
 };
 
@@ -76,39 +77,15 @@ struct CLQuantization
     const ICLInt32Array *offset; /**< Quantization offset array */
 };
 
-/** Internal keypoint structure for Lucas-Kanade Optical Flow */
-struct CLLKInternalKeypoint
+enum CLKernelType
 {
-    float x{ 0.f };               /**< x coordinate of the keypoint */
-    float y{ 0.f };               /**< y coordinate of the keypoint */
-    float tracking_status{ 0.f }; /**< the tracking status of the keypoint */
-    float dummy{ 0.f };           /**< Dummy field, to make sure the data structure 128-bit align, so that GPU can use vload4 */
+    UNKNOWN,     /**< Unknown CL kernel type */
+    DEPTHWISE,   /**< Depthwise CL kernel type */
+    DIRECT,      /**< Direct Convolution CL kernel type */
+    ELEMENTWISE, /**< Elementwise CL kernel type */
+    GEMM,        /**< GEMM CL kernel type */
+    POOL,        /**< Pool CL kernel type */
+    WINOGRAD     /**< Winograd CL kernel type */
 };
-
-/** Structure for storing Spatial Gradient Matrix and the minimum eigenvalue for each keypoint */
-struct CLCoefficientTable
-{
-    float A11;     /**< iA11 * FLT_SCALE */
-    float A12;     /**< iA11 * FLT_SCALE */
-    float A22;     /**< iA11 * FLT_SCALE */
-    float min_eig; /**< Minimum eigenvalue */
-};
-
-/** Structure for storing ival, ixval and iyval for each point inside the window */
-struct CLOldValue
-{
-    int16_t ival;  /**< ival extracts from old image */
-    int16_t ixval; /**< ixval extracts from scharr Gx image */
-    int16_t iyval; /**< iyval extracts from scharr Gy image */
-    int16_t dummy; /**< Dummy field, to make sure the data structure 128-bit align, so that GPU can use vload4 */
-};
-
-/** Interface for OpenCL Array of Internal Key Points. */
-using ICLLKInternalKeypointArray = ICLArray<CLLKInternalKeypoint>;
-/** Interface for OpenCL Array of Coefficient Tables. */
-using ICLCoefficientTableArray = ICLArray<CLCoefficientTable>;
-/** Interface for OpenCL Array of Old Values. */
-using ICLOldValArray = ICLArray<CLOldValue>;
-
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_CL_TYPES_H */

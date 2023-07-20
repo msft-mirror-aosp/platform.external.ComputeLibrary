@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Arm Limited.
+ * Copyright (c) 2020-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -25,6 +25,7 @@
 #define ARM_COMPUTE_BFLOAT16_H
 
 #include <cstdint>
+#include <cstring>
 
 namespace arm_compute
 {
@@ -39,7 +40,7 @@ namespace
 inline uint16_t float_to_bf16(const float v)
 {
     const uint32_t *fromptr = reinterpret_cast<const uint32_t *>(&v);
-#if defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16)
+#if defined(ARM_COMPUTE_ENABLE_BF16)
     uint16_t res;
 
     __asm __volatile(
@@ -49,7 +50,7 @@ inline uint16_t float_to_bf16(const float v)
         :
         : [fromptr] "r"(fromptr), [toptr] "r"(&res)
         : "v0", "memory");
-#else  /* defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16) */
+#else  /* defined(ARM_COMPUTE_ENABLE_BF16) */
     uint16_t       res   = (*fromptr >> 16);
     const uint16_t error = (*fromptr & 0x0000ffff);
     uint16_t       bf_l  = res & 0x0001;
@@ -57,7 +58,7 @@ inline uint16_t float_to_bf16(const float v)
     {
         res += 1;
     }
-#endif /* defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) || defined(ARM_COMPUTE_FORCE_BF16) */
+#endif /* defined(ARM_COMPUTE_ENABLE_BF16) */
     return res;
 }
 
@@ -70,9 +71,9 @@ inline uint16_t float_to_bf16(const float v)
 inline float bf16_to_float(const uint16_t &v)
 {
     const uint32_t lv = (v << 16);
-    const float   *fp = reinterpret_cast<const float *>(&lv);
-
-    return *fp;
+    float          fp;
+    memcpy(&fp, &lv, sizeof(lv));
+    return fp;
 }
 }
 
@@ -89,7 +90,7 @@ public:
      *
      * @param[in] v Floating-point value
      */
-    explicit bfloat16(float v)
+    bfloat16(float v)
         : value(float_to_bf16(v))
     {
     }
