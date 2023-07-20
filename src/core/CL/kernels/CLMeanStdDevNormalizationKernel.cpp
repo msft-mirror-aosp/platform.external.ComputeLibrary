@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -54,32 +54,12 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output, f
     }
     return Status{};
 }
-
-std::pair<Status, Window> validate_and_configure_window(ITensorInfo *input, ITensorInfo *output)
-{
-    if(output != nullptr)
-    {
-        ARM_COMPUTE_ERROR_ON_NULLPTR(input, output);
-        // Output auto inizialitation if not yet initialized
-        auto_init_if_empty(*output, *input);
-    }
-
-    const unsigned int num_elems_processed_per_iteration = 16 / input->element_size();
-
-    // This kernel doesn't need padding
-    Window win = calculate_max_window(*input, Steps(num_elems_processed_per_iteration));
-    if(output != nullptr)
-    {
-        output->set_valid_region(ValidRegion(Coordinates(), output->tensor_shape()));
-    }
-
-    return std::make_pair(Status{}, win);
-}
 } // namespace
 
 CLMeanStdDevNormalizationKernel::CLMeanStdDevNormalizationKernel()
     : _input(nullptr), _output(nullptr), _run_in_place(false)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLMeanStdDevNormalizationKernel::configure(ICLTensor *input, ICLTensor *output, float epsilon)
@@ -95,10 +75,15 @@ void CLMeanStdDevNormalizationKernel::configure(const CLCompileContext &compile_
 
     ARM_COMPUTE_ERROR_THROW_ON(CLMeanStdDevNormalizationKernel::validate(input->info(), (output != nullptr) ? output->info() : nullptr, epsilon));
 
+    if(output != nullptr)
+    {
+        auto_init_if_empty(*output->info(), *input->info());
+    }
+
     _input  = input;
     _output = output;
 
-    const unsigned int num_elems_processed_per_iteration = 16 / input->info()->element_size();
+    const unsigned int num_elems_processed_per_iteration = adjust_vec_size(16 / input->info()->element_size(), input->info()->dimension(0));
 
     // Set build options
     CLBuildOptions build_opts;
@@ -106,15 +91,15 @@ void CLMeanStdDevNormalizationKernel::configure(const CLCompileContext &compile_
     build_opts.add_option("-DVEC_SIZE=" + support::cpp11::to_string(num_elems_processed_per_iteration));
     build_opts.add_option("-DEPSILON=" + float_to_string_with_full_precision(epsilon));
     build_opts.add_option("-DWIDTH=" + support::cpp11::to_string(input->info()->dimension(0)));
+    build_opts.add_option_if(input->info()->data_type() == DataType::F16, "-DMEANSTDNORM_HALF");
     build_opts.add_option_if(_run_in_place, "-DIN_PLACE");
 
     // Create kernel
     _kernel = create_kernel(compile_context, "mean_stddev_normalization", build_opts.options());
 
     // Configure kernel window
-    auto win_config = validate_and_configure_window(input->info(), (_run_in_place) ? nullptr : output->info());
-    ARM_COMPUTE_ERROR_THROW_ON(win_config.first);
-    ICLKernel::configure_internal(win_config.second);
+    Window win = calculate_max_window(*input->info(), Steps(num_elems_processed_per_iteration));
+    ICLKernel::configure_internal(win);
 
     // Set config_id for enabling LWS tuning
     _config_id = "mean_stddev_normalization_layer_";
@@ -128,7 +113,6 @@ void CLMeanStdDevNormalizationKernel::configure(const CLCompileContext &compile_
 Status CLMeanStdDevNormalizationKernel::validate(const ITensorInfo *input, const ITensorInfo *output, float epsilon)
 {
     ARM_COMPUTE_RETURN_ON_ERROR(validate_arguments(input, output, epsilon));
-    ARM_COMPUTE_RETURN_ON_ERROR(validate_and_configure_window(input->clone().get(), (output != nullptr) ? output->clone().get() : nullptr).first);
     return Status{};
 }
 

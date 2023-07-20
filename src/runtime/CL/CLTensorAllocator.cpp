@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -28,39 +28,37 @@
 #include "arm_compute/runtime/CL/CLRuntimeContext.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 
-#include "support/MemorySupport.h"
-
 namespace arm_compute
 {
 const cl::Buffer CLTensorAllocator::_empty_buffer = cl::Buffer();
-
 namespace
 {
+/** Global user-defined allocator that can be used for all internal allocations of a CLTensor */
+static IAllocator *static_global_cl_allocator = nullptr;
+
 /** Helper function used to allocate the backing memory of a tensor
  *
- * @param[in] context   OpenCL context to use
  * @param[in] size      Size of the allocation
  * @param[in] alignment Alignment of the allocation
  *
  * @return A wrapped memory region
  */
-std::unique_ptr<ICLMemoryRegion> allocate_region(CLCoreRuntimeContext *ctx, size_t size, cl_uint alignment)
+std::unique_ptr<ICLMemoryRegion> allocate_region(size_t size, cl_uint alignment)
 {
     // Try fine-grain SVM
-    std::unique_ptr<ICLMemoryRegion> region = support::cpp14::make_unique<CLFineSVMMemoryRegion>(ctx,
-                                                                                                 CL_MEM_READ_WRITE | CL_MEM_SVM_FINE_GRAIN_BUFFER,
-                                                                                                 size,
-                                                                                                 alignment);
+    std::unique_ptr<ICLMemoryRegion> region = std::make_unique<CLFineSVMMemoryRegion>(CL_MEM_READ_WRITE | CL_MEM_SVM_FINE_GRAIN_BUFFER,
+                                                                                      size,
+                                                                                      alignment);
 
     // Try coarse-grain SVM in case of failure
     if(region != nullptr && region->ptr() == nullptr)
     {
-        region = support::cpp14::make_unique<CLCoarseSVMMemoryRegion>(ctx, CL_MEM_READ_WRITE, size, alignment);
+        region = std::make_unique<CLCoarseSVMMemoryRegion>(CL_MEM_READ_WRITE, size, alignment);
     }
     // Try legacy buffer memory in case of failure
     if(region != nullptr && region->ptr() == nullptr)
     {
-        region = support::cpp14::make_unique<CLBufferMemoryRegion>(ctx, CL_MEM_ALLOC_HOST_PTR | CL_MEM_READ_WRITE, size);
+        region = std::make_unique<CLBufferMemoryRegion>(CL_MEM_ALLOC_HOST_PTR | CL_MEM_READ_WRITE, size);
     }
     return region;
 }
@@ -132,18 +130,18 @@ void CLTensorAllocator::allocate()
     if(_associated_memory_group == nullptr)
     {
         // Perform memory allocation
-        if(_ctx == nullptr)
+        if(static_global_cl_allocator != nullptr)
         {
-            auto legacy_ctx = CLCoreRuntimeContext(nullptr, CLScheduler::get().context(), CLScheduler::get().queue());
-            _memory.set_owned_region(allocate_region(&legacy_ctx, info().total_size(), 0));
+            _memory.set_owned_region(static_global_cl_allocator->make_region(info().total_size(), 0));
         }
         else
         {
-            _memory.set_owned_region(allocate_region(_ctx->core_runtime_context(), info().total_size(), 0));
+            _memory.set_owned_region(allocate_region(info().total_size(), 0));
         }
     }
     else
     {
+        // Finalize memory management instead
         _associated_memory_group->finalize_memory(_owner, _memory, info().total_size(), alignment());
     }
 
@@ -173,15 +171,7 @@ Status CLTensorAllocator::import_memory(cl::Buffer buffer)
     ARM_COMPUTE_RETURN_ERROR_ON(buffer.getInfo<CL_MEM_CONTEXT>().get() != CLScheduler::get().context().get());
     ARM_COMPUTE_RETURN_ERROR_ON(_associated_memory_group != nullptr);
 
-    if(_ctx == nullptr)
-    {
-        auto legacy_ctx = CLCoreRuntimeContext(nullptr, CLScheduler::get().context(), CLScheduler::get().queue());
-        _memory.set_owned_region(support::cpp14::make_unique<CLBufferMemoryRegion>(buffer, &legacy_ctx));
-    }
-    else
-    {
-        _memory.set_owned_region(support::cpp14::make_unique<CLBufferMemoryRegion>(buffer, _ctx->core_runtime_context()));
-    }
+    _memory.set_owned_region(std::make_unique<CLBufferMemoryRegion>(buffer));
 
     info().set_is_resizable(false);
     return Status{};
@@ -194,6 +184,11 @@ void CLTensorAllocator::set_associated_memory_group(IMemoryGroup *associated_mem
     ARM_COMPUTE_ERROR_ON(_memory.region() != nullptr && _memory.cl_region()->cl_data().get() != nullptr);
 
     _associated_memory_group = associated_memory_group;
+}
+
+void CLTensorAllocator::set_global_allocator(IAllocator *allocator)
+{
+    static_global_cl_allocator = allocator;
 }
 
 uint8_t *CLTensorAllocator::lock()

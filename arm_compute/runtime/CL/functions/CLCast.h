@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,10 +24,11 @@
 #ifndef ARM_COMPUTE_CLCAST_H
 #define ARM_COMPUTE_CLCAST_H
 
-#include "arm_compute/core/Types.h"
-#include "arm_compute/runtime/CL/ICLSimpleFunction.h"
+#include "arm_compute/runtime/IFunction.h"
 
-#include <cstdint>
+#include "arm_compute/core/Types.h"
+
+#include <memory>
 
 namespace arm_compute
 {
@@ -35,23 +36,39 @@ class CLCompileContext;
 class ICLTensor;
 class ITensorInfo;
 
-/** Basic function to run @ref CLDepthConvertLayerKernel. */
-class CLCast : public ICLSimpleFunction
+/** Basic function to run @ref opencl::kernels::ClCastKernel */
+class CLCast : public IFunction
 {
 public:
+    /** Constructor */
+    CLCast();
+    /** Destructor */
+    ~CLCast();
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    CLCast(const CLCast &) = delete;
+    /** Default move constructor */
+    CLCast(CLCast &&);
+    /** Prevent instances of this class from being copied (As this class contains pointers) */
+    CLCast &operator=(const CLCast &) = delete;
+    /** Default move assignment operator */
+    CLCast &operator=(CLCast &&);
     /** Initialize the function's source, destination
      *
+     * Valid data layouts:
+     * - All
+     *
+     * Valid data type configurations:
+     * |src            |dst                                    |
+     * |:--------------|:--------------------------------------|
+     * |U8             | S8, U16, S16, U32, S32, F16, F32      |
+     * |U16            | U8, S8, S16, U32, S32, F16, F32       |
+     * |S16            | U8, S8, U16, U32, S32, F16, F32       |
+     * |U32            | U8, S8, U16, S16, S32, F16, F32       |
+     * |S32            | U8, S8, U16, S16, U32, F16, F32       |
+     * |F16            | U8, S8, U16, S16, U32, F32            |
+     * |F32            | U8, S8, U16, S16, U32, F16            |
+     *
      * Input data type must be different than output data type.
-     *
-     * Valid conversions Input -> Output :
-     *
-     *   - U8  -> S8, U16, S16, U32, S32, F16, F32
-     *   - U16 -> U8, S8, S16, U32, S32, F16, F32
-     *   - S16 -> U8, S8, U16, U32, S32, F16, F32
-     *   - U32 -> U8, S8, U16, S16, S32, F16, F32
-     *   - S32 -> U8, S8, U16, S16, U32, F16, F32
-     *   - F16 -> U8, S8, U16, S16, U32, F32
-     *   - F32 -> U8, S8, U16, S16, U32, F16
      *
      * @param[in]  input  The input tensor to convert. Data types supported: U8/S8/U16/S16/U32/S32/F16/F32.
      * @param[out] output The output tensor. Data types supported: U8/S8/U16/S16/U32/S32/F16/F32.
@@ -87,6 +104,13 @@ public:
      * @return a status
      */
     static Status validate(const ITensorInfo *input, const ITensorInfo *output, ConvertPolicy policy);
+
+    // Inherited methods overridden:
+    void run() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 } // namespace arm_compute
 #endif /*ARM_COMPUTE_CLCAST_H*/

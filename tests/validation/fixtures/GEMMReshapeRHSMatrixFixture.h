@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -46,7 +46,7 @@ namespace validation
 {
 using namespace arm_compute::misc::shape_calculator;
 
-template <typename TensorType, typename AccessorType, typename FunctionType, typename T>
+template <typename TensorType, typename AccessorType, typename OperatorType, typename T>
 class GEMMReshapeRHSMatrixValidationFixture : public framework::Fixture
 {
 public:
@@ -85,23 +85,26 @@ protected:
         // The output tensor will be auto-initialized within the function
 
         // Create and configure function
-        FunctionType gemm_rhs_reshape;
-        gemm_rhs_reshape.configure(&src, &dst, rhs_info);
+        OperatorType gemm_rhs_reshape;
+        gemm_rhs_reshape.configure(src.info(), dst.info(), rhs_info);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+
+        add_padding_x({ &src, &dst });
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src));
 
         // Compute GEMM RHS matrix reshape function
-        gemm_rhs_reshape.run();
+        ITensorPack tensors = { { ACL_SRC, &src }, { ACL_DST, &dst } };
+        gemm_rhs_reshape.run(tensors);
 
         return dst;
     }
