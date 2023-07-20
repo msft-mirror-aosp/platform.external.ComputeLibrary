@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Arm Limited.
+ * Copyright (c) 2017-2018, 2021-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,6 +22,9 @@
  * SOFTWARE.
  */
 
+#ifndef ARM_COMPUTE_TEST_SIMPLE_TENSOR_PRINTER
+#define ARM_COMPUTE_TEST_SIMPLE_TENSOR_PRINTER
+
 #include "arm_compute/core/Error.h"
 
 #include "tests/RawTensor.h"
@@ -33,8 +36,6 @@
 namespace arm_compute
 {
 namespace test
-{
-namespace
 {
 template <typename T>
 inline std::string prettify_tensor(const SimpleTensor<T> &input, const IOFormatInfo &io_fmt = IOFormatInfo{ IOFormatInfo::PrintRegion::NoPadding })
@@ -152,6 +153,6 @@ void print_simpletensor(const SimpleTensor<T> &tensor, const std::string &title,
     }
 }
 #endif // PRINT_TENSOR_LIMIT
-}
 } // namespace test
 } // namespace arm_compute
+#endif /* ARM_COMPUTE_TEST_SIMPLE_TENSOR_PRINTER */

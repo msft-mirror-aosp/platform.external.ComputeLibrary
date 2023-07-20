@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -61,14 +61,14 @@ protected:
         if(is_data_type_quantized(tensor.data_type()))
         {
             std::pair<int, int> bounds = get_quantized_bounds(tensor.quantization_info(), -1.0f, 1.0f);
-            std::uniform_int_distribution<uint8_t> distribution(bounds.first, bounds.second);
+            std::uniform_int_distribution<uint32_t> distribution(bounds.first, bounds.second);
 
             library->fill(tensor, distribution, i);
         }
         else
         {
-            // When converting S32 to F16, both reference and NEON implementations are + or - infinity outside the F16 range.
-            if(dt_in==DataType::S32 && dt_out==DataType::F16)
+            // When converting S32 to F16, both reference and Compute Library implementations are + or - infinity outside the F16 range.
+            if(dt_in == DataType::S32 && dt_out == DataType::F16)
             {
                 std::uniform_int_distribution<int32_t> distribution_s32(-65504, 65504);
                 library->fill(tensor, distribution_s32, i);
@@ -90,15 +90,15 @@ protected:
         FunctionType depth_convert;
         depth_convert.configure(&src, &dst, policy, shift);
 
-        ARM_COMPUTE_EXPECT(src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(dst.info()->is_resizable());
 
         // Allocate tensors
         src.allocator()->allocate();
         dst.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!src.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!dst.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!src.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!dst.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(src), 0, dt_in, dt_out);

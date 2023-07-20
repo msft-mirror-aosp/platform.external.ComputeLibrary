@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -66,7 +66,7 @@ public:
 
         // Create input descriptor
         const auto        operation_layout = common_params.data_layout;
-        const TensorShape tensor_shape     = permute_shape(TensorShape(224U, 224U, 3U, 1U), DataLayout::NCHW, operation_layout);
+        const TensorShape tensor_shape     = permute_shape(TensorShape(224U, 224U, 3U, common_params.batches), DataLayout::NCHW, operation_layout);
         TensorDescriptor  input_descriptor = TensorDescriptor(tensor_shape, common_params.data_type).set_layout(operation_layout);
 
         // Set weights trained layout
@@ -102,6 +102,7 @@ public:
         config.use_tuner   = common_params.enable_tuner;
         config.tuner_mode  = common_params.tuner_mode;
         config.tuner_file  = common_params.tuner_file;
+        config.mlgo_file   = common_params.mlgo_file;
 
         graph.finalize(common_params.target, config);
 
@@ -191,7 +192,7 @@ private:
  * Model is based on:
  *      https://arxiv.org/abs/1611.05431
  *      "Aggregated Residual Transformations for Deep Neural Networks"
- *      Saining Xie, Ross Girshick, Piotr Dollar, Zhuowen Tu, Kaiming He
+ *      Saining Xie, Ross Girshick, Piotr Dollar, Zhuowen Tu, Kaiming He.
  *
  * @note To list all the possible arguments execute the binary appended with the --help option
  *
