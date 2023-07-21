@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -21,49 +21,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "src/core/CL/kernels/CLElementwiseOperationKernel.h"
-
-#include "arm_compute/core/CL/ICLTensor.h"
-#include "arm_compute/runtime/CL/CLScheduler.h"
 #include "arm_compute/runtime/CL/functions/CLPReluLayer.h"
-#include "support/MemorySupport.h"
+#include "arm_compute/core/CL/CLKernelLibrary.h"
+#include "arm_compute/core/CL/ICLTensor.h"
+#include "src/gpu/cl/IClKernel.h"
+#include "src/gpu/cl/operators/ClPRelu.h"
 
 namespace arm_compute
 {
-namespace experimental
-{
-CLPReluLayer::CLPReluLayer()
-{
-}
-
-void CLPReluLayer::configure(const CLCompileContext &compile_context, ITensorInfo *input, ITensorInfo *alpha, ITensorInfo *output)
-{
-    auto k = arm_compute::support::cpp14::make_unique<CLArithmeticOperationKernel>();
-    k->configure(compile_context, ArithmeticOperation::PRELU, input, alpha, output);
-    _kernel = std::move(k);
-}
-
-Status CLPReluLayer::validate(const ITensorInfo *input, const ITensorInfo *alpha, const ITensorInfo *output)
-{
-    return CLArithmeticOperationKernel::validate(ArithmeticOperation::PRELU, input, alpha, output);
-}
-
-void CLPReluLayer::run(ITensorPack &tensors)
-{
-    ICLOperator::run(tensors);
-}
-} // namespace experimental
+using OperatorType = opencl::ClPRelu;
 
 struct CLPReluLayer::Impl
 {
-    const ICLTensor                            *src_0{ nullptr };
-    const ICLTensor                            *src_1{ nullptr };
-    ICLTensor                                  *dst{ nullptr };
-    std::unique_ptr<experimental::CLPReluLayer> op{ nullptr };
+    const ICLTensor              *src_0{ nullptr };
+    const ICLTensor              *src_1{ nullptr };
+    ICLTensor                    *dst{ nullptr };
+    std::unique_ptr<OperatorType> op{ nullptr };
 };
 
 CLPReluLayer::CLPReluLayer()
-    : _impl(support::cpp14::make_unique<Impl>())
+    : _impl(std::make_unique<Impl>())
 {
 }
 CLPReluLayer::CLPReluLayer(CLPReluLayer &&) = default;
@@ -80,13 +57,13 @@ void CLPReluLayer::configure(const CLCompileContext &compile_context, ICLTensor 
     _impl->src_0 = input;
     _impl->src_1 = alpha;
     _impl->dst   = output;
-    _impl->op    = arm_compute::support::cpp14::make_unique<experimental::CLPReluLayer>();
-    _impl->op->configure(compile_context, input->info(), alpha->info(), output->info());
+    _impl->op    = std::make_unique<OperatorType>();
+    _impl->op->configure(compile_context, input->info(), alpha->info(), (output == nullptr ? input->info() : output->info()));
 }
 
 Status CLPReluLayer::validate(const ITensorInfo *input, const ITensorInfo *alpha, const ITensorInfo *output)
 {
-    return experimental::CLPReluLayer::validate(input, alpha, output);
+    return OperatorType::validate(input, alpha, output);
 }
 
 void CLPReluLayer::run()

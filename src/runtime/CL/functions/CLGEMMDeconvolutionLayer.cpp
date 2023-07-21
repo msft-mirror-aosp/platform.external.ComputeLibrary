@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Arm Limited.
+ * Copyright (c) 2019-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -29,21 +29,9 @@
 #include "arm_compute/core/utils/quantization/AsymmHelpers.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
 #include "src/core/CL/kernels/CLDeconvolutionReshapeOutputKernel.h"
-#include "src/core/CL/kernels/CLDepthConvertLayerKernel.h"
 #include "src/core/CL/kernels/CLFillBorderKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyNativeKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpMatrixMultiplyReshapedOnlyRHSKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpOffsetContributionOutputStageKernel.h"
-#include "src/core/CL/kernels/CLGEMMLowpReductionKernel.h"
-#include "src/core/CL/kernels/CLGEMMMatrixMultiplyKernel.h"
-#include "src/core/CL/kernels/CLGEMMMatrixMultiplyReshapedKernel.h"
-#include "src/core/CL/kernels/CLGEMMMatrixMultiplyReshapedOnlyRHSKernel.h"
-#include "src/core/CL/kernels/CLGEMMReshapeLHSMatrixKernel.h"
-#include "src/core/CL/kernels/CLGEMMReshapeRHSMatrixKernel.h"
-#include "src/core/CL/kernels/CLIm2ColKernel.h"
-#include "src/core/CL/kernels/CLWeightsReshapeKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 #include <tuple>
 
@@ -114,7 +102,7 @@ CLGEMMDeconvolutionLayer::CLGEMMDeconvolutionLayer(std::shared_ptr<IMemoryManage
       _permute_weights_to_nhwc(),
       _reshape_weights(),
       _transpose_weights(),
-      _deconv_reshape(support::cpp14::make_unique<CLDeconvolutionReshapeOutputKernel>()),
+      _deconv_reshape(std::make_unique<CLDeconvolutionReshapeOutputKernel>()),
       _slice_gemm(),
       _gemmlowp_final(),
       _reshaped_weights(),
@@ -242,6 +230,7 @@ void CLGEMMDeconvolutionLayer::configure(const CLCompileContext &compile_context
                                                                   bias != nullptr ? bias->info() : nullptr,
                                                                   output->info(),
                                                                   deconv_info));
+    ARM_COMPUTE_LOG_PARAMS(input, weights, bias, output, deconv_info);
 
     _original_weights = weights;
     _padded_input     = deconv_info.pad_bottom() > 0 || deconv_info.pad_left() > 0 || deconv_info.pad_right() > 0 || deconv_info.pad_top() > 0;

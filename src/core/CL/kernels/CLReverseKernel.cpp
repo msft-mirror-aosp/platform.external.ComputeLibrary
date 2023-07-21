@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -61,6 +61,7 @@ Status validate_arguments(const ITensorInfo *input, const ITensorInfo *output, c
 CLReverseKernel::CLReverseKernel()
     : _input(nullptr), _output(nullptr), _axis(nullptr)
 {
+    _type = CLKernelType::ELEMENTWISE;
 }
 
 void CLReverseKernel::configure(const ICLTensor *input, ICLTensor *output, const ICLTensor *axis)
@@ -71,6 +72,7 @@ void CLReverseKernel::configure(const ICLTensor *input, ICLTensor *output, const
 void CLReverseKernel::configure(const CLCompileContext &compile_context, const ICLTensor *input, ICLTensor *output, const ICLTensor *axis)
 {
     ARM_COMPUTE_ERROR_ON_NULLPTR(input, output, axis);
+    auto padding_info = get_padding_info({ input, output, axis });
 
     _input  = input;
     _output = output;
@@ -109,6 +111,7 @@ void CLReverseKernel::configure(const CLCompileContext &compile_context, const I
     _config_id += support::cpp11::to_string(input->info()->dimension(1));
     _config_id += "_";
     _config_id += support::cpp11::to_string(input->info()->dimension(2));
+    ARM_COMPUTE_ERROR_ON(has_padding_changed(padding_info));
 }
 
 Status CLReverseKernel::validate(const ITensorInfo *input, const ITensorInfo *output, const ITensorInfo *axis)
