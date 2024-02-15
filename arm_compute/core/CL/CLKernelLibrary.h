@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020 Arm Limited.
+ * Copyright (c) 2016-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -47,7 +47,7 @@ private:
 
 public:
     /** Access the KernelLibrary singleton.
-     * This method has been deprecated and will be removed in the next release.
+     * This method has been deprecated and will be removed in future releases
      * @return The KernelLibrary instance.
      */
     static CLKernelLibrary &get();
@@ -148,6 +148,12 @@ public:
      */
     std::string get_program_name(const std::string &kernel_name) const;
 
+    /* Returns true if the workgroup batch size modifier parameter is supported on the cl device
+    *
+    * @return true if the workgroup batch size modifier parameter is supported, false otherwise
+    */
+    bool is_wbsm_supported();
+
     /** Sets the CL context used to create programs.
      *
      * @note Setting the context also resets the device to the
@@ -164,11 +170,7 @@ public:
     CLCompileContext &get_compile_context();
 
 private:
-    CLCompileContext _compile_context;                                   /**< Compile Context. */
-    std::string      _kernel_path;                                       /**< Path to the kernels folder. */
-    static const std::map<std::string, std::string> _kernel_program_map; /**< Map that associates kernel names with programs. */
-    static const std::map<std::string, std::string> _program_source_map; /**< Contains sources for all programs.
-                                                                            Used for compile-time kernel inclusion. >*/
+    CLCompileContext _compile_context; /**< Compile Context. */
 };
 } // namespace arm_compute
 #endif /* ARM_COMPUTE_CLKERNELLIBRARY_H */
