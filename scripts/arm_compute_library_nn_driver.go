@@ -33,13 +33,13 @@ func isVersionAtLeast(version_name string, target_version int) bool {
 func globalFlags(ctx android.BaseContext) []string {
     var cppflags []string
 
-   if ctx.AConfig().PlatformVersionName() == "Q" || ctx.AConfig().PlatformVersionName() == "10" ||
-      ctx.AConfig().PlatformVersionName() == "R" || ctx.AConfig().PlatformVersionName() == "11" ||
-      ctx.AConfig().PlatformVersionName() == "S" || ctx.AConfig().PlatformVersionName() == "12" {
+   if ctx.Config().PlatformVersionName() == "Q" || ctx.Config().PlatformVersionName() == "10" ||
+      ctx.Config().PlatformVersionName() == "R" || ctx.Config().PlatformVersionName() == "11" ||
+      ctx.Config().PlatformVersionName() == "S" || ctx.Config().PlatformVersionName() == "12" {
         cppflags = append(cppflags, "-fno-addrsig")
     }
 
-    if ctx.AConfig().PlatformVersionName() == "R" || ctx.AConfig().PlatformVersionName() == "11" {
+    if ctx.Config().PlatformVersionName() == "R" || ctx.Config().PlatformVersionName() == "11" {
       for _, a := range ctx.DeviceConfig().Arches() {
         theArch := a.ArchType.String()
         if theArch == "armv8-2a" {
@@ -49,7 +49,7 @@ func globalFlags(ctx android.BaseContext) []string {
       }
     }
 
-    data_types := strings.Split(ctx.AConfig().GetenvWithDefault("COMPUTE_LIB_DATA_TYPE", "ALL"), ",")
+    data_types := strings.Split(ctx.Config().GetenvWithDefault("COMPUTE_LIB_DATA_TYPE", "ALL"), ",")
 
     for _, x := range data_types {
         if strings.ToUpper(x) == "ALL" || strings.ToUpper(x) == "INTEGER" {
@@ -75,7 +75,7 @@ func globalFlags(ctx android.BaseContext) []string {
         }
     }
 
-    data_layouts := strings.Split(ctx.AConfig().GetenvWithDefault("COMPUTE_LIB_DATA_LAYOUT", "ALL"), ",")
+    data_layouts := strings.Split(ctx.Config().GetenvWithDefault("COMPUTE_LIB_DATA_LAYOUT", "ALL"), ",")
 
     for _, x := range data_layouts {
         if strings.ToUpper(x) == "ALL" || strings.ToUpper(x) == "NHWC" {
