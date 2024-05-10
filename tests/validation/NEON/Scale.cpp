@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2022 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -22,16 +22,10 @@
  * SOFTWARE.
  */
 #include "arm_compute/core/Helpers.h"
-#include "arm_compute/core/Types.h"
 #include "arm_compute/runtime/NEON/functions/NEScale.h"
-#include "arm_compute/runtime/Tensor.h"
-#include "arm_compute/runtime/TensorAllocator.h"
 #include "tests/NEON/Accessor.h"
-#include "tests/PaddingCalculator.h"
 #include "tests/datasets/ScaleValidationDataset.h"
-#include "tests/framework/Asserts.h"
 #include "tests/framework/Macros.h"
-#include "tests/validation/Helpers.h"
 #include "tests/validation/Validation.h"
 #include "tests/validation/fixtures/ScaleFixture.h"
 
@@ -50,8 +44,8 @@ using datasets::ScaleSamplingPolicySet;
 using datasets::ScaleAlignCornersSamplingPolicySet;
 
 /** We consider vector size in byte 64 since the maximum size of
- * a vector used by @ref NEScaleKernel is currently 64-byte (float32x4x4).
- * There are possibility to reduce test time further by using
+ * a vector used by the kernel is currently 64-byte (float32x4x4).
+ * There is possibility to reduce test time further by using
  * smaller vector sizes for different data types where applicable.
  */
 constexpr uint32_t vector_byte = 64;
@@ -62,25 +56,31 @@ constexpr uint32_t num_elements_per_vector()
     return vector_byte / sizeof(T);
 }
 
-/** Scale data types */
-const auto ScaleDataTypes = framework::dataset::make("DataType",
-{
-    DataType::U8,
-    DataType::S16,
-    DataType::F32,
-});
-
 /** Quantization information data set */
 const auto QuantizationInfoSet = framework::dataset::make("QuantizationInfo",
 {
     QuantizationInfo(0.5f, -10),
 });
 
+/** Quantization information data set */
+const auto InputQuantizationInfoSet = framework::dataset::make("InputQuantizationInfo",
+{
+    QuantizationInfo(0.5f, -10),
+});
+
+/** Quantization information data set */
+const auto OutputQuantizationInfoSet = framework::dataset::make("OutputQuantizationInfo",
+{
+    QuantizationInfo(0.2f, 20),
+});
+
 /** Tolerance */
 constexpr AbsoluteTolerance<uint8_t> tolerance_u8(1);
+constexpr AbsoluteTolerance<int8_t>  tolerance_s8(1);
 constexpr AbsoluteTolerance<int16_t> tolerance_s16(1);
 RelativeTolerance<float>             tolerance_f32(0.05);
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+constexpr float         abs_tolerance_f16(0.01f);
 RelativeTolerance<half> tolerance_f16(half(0.1));
 #endif /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
 
@@ -94,9 +94,8 @@ TEST_SUITE(Validate)
 
 /** Validate test suite is to test ARM_COMPUTE_RETURN_ON_* macros
  * we use to check the validity of given arguments in @ref NEScale
- * and subsequent call to @ref NEScaleKernel.
  * Since this is using validate() of @ref NEScale, which pre-adjust
- * arguments for @ref NEScaleKernel, the following conditions in
+ * arguments for the kernel, the following conditions in
  * the kernel are not currently tested.
  * - The same input and output
  * - Data type of offset, dx and dy
@@ -317,12 +316,28 @@ DATA_TEST_CASE(CheckNoPaddingInterpAREA, framework::DatasetMode::ALL, combine(co
 template <typename T>
 using NEScaleFixture = ScaleValidationFixture<Tensor, Accessor, NEScale, T>;
 template <typename T>
+using NEScaleMixedDataLayoutFixture = ScaleValidationFixture<Tensor, Accessor, NEScale, T, true>;
+template <typename T>
 using NEScaleQuantizedFixture = ScaleValidationQuantizedFixture<Tensor, Accessor, NEScale, T>;
+template <typename T>
+using NEScaleDifferentOutputQuantizedFixture = ScaleValidationDifferentOutputQuantizedFixture<Tensor, Accessor, NEScale, T>;
+template <typename T>
+using NEScaleQuantizedMixedDataLayoutFixture = ScaleValidationQuantizedFixture<Tensor, Accessor, NEScale, T, true>;
 
 TEST_SUITE(Float)
 TEST_SUITE(FP32)
-const auto f32_shape = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<float>())), framework::dataset::make("DataType", DataType::F32));
+const auto f32_shape      = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<float>())), framework::dataset::make("DataType", DataType::F32));
+const auto f32_shape_nhwc = combine(datasets::Small3DShapes(), framework::dataset::make("DataType", DataType::F32));
 FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture<float>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f32_shape, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32);
+}
+FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEScaleMixedDataLayoutFixture<float>, framework::DatasetMode::PRECOMMIT, ASSEMBLE_DATASET(f32_shape, ScaleSamplingPolicySet))
 {
     //Create valid region
     TensorInfo  src_info(_shape, 1, _data_type);
@@ -340,10 +355,38 @@ FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleFixture<float>, framework::D
     // Validate output
     validate(Accessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32);
 }
+FIXTURE_DATA_TEST_CASE(RunMediumNHWC, NEScaleFixture<float>, framework::DatasetMode::ALL, ASSEMBLE_NHWC_DATASET(f32_shape_nhwc, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32);
+}
+FIXTURE_DATA_TEST_CASE(RunMediumMixedDataLayoutNHWC, NEScaleMixedDataLayoutFixture<float>, framework::DatasetMode::PRECOMMIT, ASSEMBLE_NHWC_DATASET(f32_shape_nhwc, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32);
+}
+FIXTURE_DATA_TEST_CASE(RunMediumAlignCornersNHWC, NEScaleFixture<float>, framework::DatasetMode::ALL, ASSEMBLE_NHWC_DATASET(f32_shape_nhwc, ScaleAlignCornersSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f32, tolerance_num_f32);
+}
 TEST_SUITE_END() // FP32
 #ifdef __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
 TEST_SUITE(FP16)
-const auto f16_shape = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<half>())), framework::dataset::make("DataType", DataType::F16));
+const auto f16_shape      = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<half>())), framework::dataset::make("DataType", DataType::F16));
+const auto f16_shape_nhwc = combine(datasets::Small3DShapes(), framework::dataset::make("DataType", DataType::F16));
 FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture<half>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f16_shape, ScaleSamplingPolicySet))
 {
     //Create valid region
@@ -351,7 +394,7 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture<half>, framework::DatasetMode::A
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(Accessor(_target), _reference, valid_region, tolerance_f16);
+    validate(Accessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
 }
 FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleFixture<half>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(f16_shape, ScaleAlignCornersSamplingPolicySet))
 {
@@ -360,7 +403,34 @@ FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleFixture<half>, framework::Da
     const ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
 
     // Validate output
-    validate(Accessor(_target), _reference, valid_region, tolerance_f16);
+    validate(Accessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+}
+FIXTURE_DATA_TEST_CASE(RunMediumNHWC, NEScaleFixture<half>, framework::DatasetMode::ALL, ASSEMBLE_NHWC_DATASET(f16_shape_nhwc, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+}
+FIXTURE_DATA_TEST_CASE(RunMediumMixedDataLayoutNHWC, NEScaleMixedDataLayoutFixture<half>, framework::DatasetMode::PRECOMMIT, ASSEMBLE_NHWC_DATASET(f16_shape_nhwc, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
+}
+FIXTURE_DATA_TEST_CASE(RunMediumAlignCornersNHWC, NEScaleFixture<half>, framework::DatasetMode::ALL, ASSEMBLE_NHWC_DATASET(f16_shape_nhwc, ScaleAlignCornersSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_f16, 0.0f, abs_tolerance_f16);
 }
 TEST_SUITE_END() // FP16
 #endif           /* __ARM_FEATURE_FP16_VECTOR_ARITHMETIC */
@@ -388,6 +458,27 @@ FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleFixture<uint8_t>, framework:
     validate(Accessor(_target), _reference, valid_region, tolerance_u8);
 }
 TEST_SUITE_END() // U8
+TEST_SUITE(S8)
+const auto s8_shape = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<int8_t>())), framework::dataset::make("DataType", DataType::S8));
+FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture<int8_t>, framework::DatasetMode::ALL, ASSEMBLE_S8_DATASET(s8_shape, ScaleSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_s8);
+}
+FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleFixture<int8_t>, framework::DatasetMode::ALL, ASSEMBLE_S8_DATASET(s8_shape, ScaleAlignCornersSamplingPolicySet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_s8);
+}
+TEST_SUITE_END() // S8
 TEST_SUITE(S16)
 const auto s16_shape = combine((SCALE_SHAPE_DATASET(num_elements_per_vector<int16_t>())), framework::dataset::make("DataType", DataType::S16));
 FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleFixture<int16_t>, framework::DatasetMode::ALL, ASSEMBLE_DATASET(s16_shape, ScaleSamplingPolicySet))
@@ -423,6 +514,26 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleQuantizedFixture<uint8_t>, framework::Da
     // Validate output
     validate(Accessor(_target), _reference, valid_region, tolerance_u8);
 }
+FIXTURE_DATA_TEST_CASE(RunSmallDifferentOutputQuantization, NEScaleDifferentOutputQuantizedFixture<uint8_t>, framework::DatasetMode::ALL,
+                       ASSEMBLE_DIFFERENTLY_QUANTIZED_DATASET(qasymm8_shape, ScaleSamplingPolicySet, InputQuantizationInfoSet, OutputQuantizationInfoSet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_u8);
+}
+FIXTURE_DATA_TEST_CASE(RunMixedDataLayout, NEScaleQuantizedMixedDataLayoutFixture<uint8_t>, framework::DatasetMode::ALL, ASSEMBLE_QUANTIZED_DATASET(qasymm8_shape, ScaleSamplingPolicySet,
+                       QuantizationInfoSet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_u8);
+}
 FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleQuantizedFixture<uint8_t>, framework::DatasetMode::ALL, ASSEMBLE_QUANTIZED_DATASET(qasymm8_shape, ScaleAlignCornersSamplingPolicySet,
                        QuantizationInfoSet))
 {
@@ -446,6 +557,16 @@ FIXTURE_DATA_TEST_CASE(RunSmall, NEScaleQuantizedFixture<int8_t>, framework::Dat
     // Validate output
     validate(Accessor(_target), _reference, valid_region, tolerance_qasymm8_signed);
 }
+FIXTURE_DATA_TEST_CASE(RunSmallDifferentOutputQuantization, NEScaleDifferentOutputQuantizedFixture<int8_t>, framework::DatasetMode::ALL,
+                       ASSEMBLE_DIFFERENTLY_QUANTIZED_DATASET(qasymm8_signed_shape, ScaleSamplingPolicySet, InputQuantizationInfoSet, OutputQuantizationInfoSet))
+{
+    //Create valid region
+    TensorInfo  src_info(_shape, 1, _data_type);
+    ValidRegion valid_region = calculate_valid_region_scale(src_info, _reference.shape(), _policy, _sampling_policy, (_border_mode == BorderMode::UNDEFINED));
+
+    // Validate output
+    validate(Accessor(_target), _reference, valid_region, tolerance_qasymm8_signed);
+}
 FIXTURE_DATA_TEST_CASE(RunSmallAlignCorners, NEScaleQuantizedFixture<int8_t>, framework::DatasetMode::ALL, ASSEMBLE_QUANTIZED_DATASET(qasymm8_signed_shape, ScaleAlignCornersSamplingPolicySet,
                        QuantizationInfoSet))
 {
@@ -460,7 +581,7 @@ TEST_SUITE_END() // QASYMM8_SIGNED
 TEST_SUITE_END() // Quantized
 
 TEST_SUITE_END() // Scale
-TEST_SUITE_END() // NEON
+TEST_SUITE_END() // Neon
 } // namespace validation
 } // namespace test
 } // namespace arm_compute

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -162,6 +162,11 @@ DummyAccessor::DummyAccessor(unsigned int maximum)
 {
 }
 
+bool DummyAccessor::access_tensor_data()
+{
+    return false;
+}
+
 bool DummyAccessor::access_tensor(ITensor &tensor)
 {
     ARM_COMPUTE_UNUSED(tensor);
@@ -274,8 +279,9 @@ bool ImageAccessor::access_tensor(ITensor &tensor)
         }
 
         ARM_COMPUTE_EXIT_ON_MSG_VAR(image_loader->width() != permuted_shape.x() || image_loader->height() != permuted_shape.y(),
-                                    "Failed to load image file: dimensions [%d,%d] not correct, expected [%zu ,%zu ].",
-                                    image_loader->width(), image_loader->height(), permuted_shape.x(), permuted_shape.y());
+                                    "Failed to load image file: dimensions [%d,%d] not correct, expected [%" PRIu64 ",%" PRIu64 "].",
+                                    image_loader->width(), image_loader->height(),
+                                    static_cast<uint64_t>(permuted_shape.x()), static_cast<uint64_t>(permuted_shape.y()));
 
         // Fill the tensor with the PPM content (BGR)
         image_loader->fill_planar_tensor(tensor, _bgr);
@@ -351,8 +357,9 @@ bool ValidationInputAccessor::access_tensor(arm_compute::ITensor &tensor)
         }
 
         ARM_COMPUTE_EXIT_ON_MSG_VAR(jpeg.width() != permuted_shape.x() || jpeg.height() != permuted_shape.y(),
-                                    "Failed to load image file: dimensions [%d,%d] not correct, expected [%zu,%zu ].",
-                                    jpeg.width(), jpeg.height(), permuted_shape.x(), permuted_shape.y());
+                                    "Failed to load image file: dimensions [%d,%d] not correct, expected [%" PRIu64 ",%" PRIu64 "].",
+                                    jpeg.width(), jpeg.height(),
+                                    static_cast<uint64_t>(permuted_shape.x()), static_cast<uint64_t>(permuted_shape.y()));
 
         // Fill the tensor with the JPEG content (BGR)
         jpeg.fill_planar_tensor(tensor, _bgr);
@@ -731,7 +738,7 @@ bool RandomAccessor::access_tensor(ITensor &tensor)
         }
         case DataType::F16:
         {
-            std::uniform_real_distribution<float> distribution_f16(_lower.get<half>(), _upper.get<half>());
+            arm_compute::utils::uniform_real_distribution_16bit<half> distribution_f16(_lower.get<float>(), _upper.get<float>());
             fill<half>(tensor, distribution_f16);
             break;
         }

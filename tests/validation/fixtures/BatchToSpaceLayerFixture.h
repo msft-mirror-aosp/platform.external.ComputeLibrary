@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -50,7 +50,10 @@ protected:
     template <typename U>
     void fill(U &&tensor, int i)
     {
-        std::uniform_real_distribution<> distribution(-1.0f, 1.0f);
+        static_assert(std::is_floating_point<T>::value || std::is_same<T, half>::value, "Only floating point data types supported.");
+        using DistributionType = typename std::conditional<std::is_same<T, half>::value, arm_compute::utils::uniform_real_distribution_16bit<T>, std::uniform_real_distribution<T>>::type;
+
+        DistributionType distribution{ T(-1.0f), T(1.0f) };
         library->fill(tensor, distribution, i);
     }
     TensorType compute_target(TensorShape input_shape, TensorShape block_shape_shape, TensorShape output_shape,
@@ -71,24 +74,24 @@ protected:
         FunctionType batch_to_space;
         batch_to_space.configure(&input, &block_shape, &output);
 
-        ARM_COMPUTE_EXPECT(input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(block_shape.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(block_shape.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(output.info()->is_resizable());
 
         // Allocate tensors
         input.allocator()->allocate();
         block_shape.allocator()->allocate();
         output.allocator()->allocate();
 
-        ARM_COMPUTE_EXPECT(!input.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!block_shape.info()->is_resizable(), framework::LogLevel::ERRORS);
-        ARM_COMPUTE_EXPECT(!output.info()->is_resizable(), framework::LogLevel::ERRORS);
+        ARM_COMPUTE_ASSERT(!input.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!block_shape.info()->is_resizable());
+        ARM_COMPUTE_ASSERT(!output.info()->is_resizable());
 
         // Fill tensors
         fill(AccessorType(input), 0);
         {
-            auto block_shape_data = AccessorType(block_shape);
-            const int idx_width       = get_data_layout_dimension_index(data_layout, DataLayoutDimension::WIDTH);
+            auto      block_shape_data = AccessorType(block_shape);
+            const int idx_width        = get_data_layout_dimension_index(data_layout, DataLayoutDimension::WIDTH);
             for(unsigned int i = 0; i < block_shape_shape.x(); ++i)
             {
                 static_cast<int32_t *>(block_shape_data.data())[i] = output_shape[i + idx_width] / input_shape[i + idx_width];

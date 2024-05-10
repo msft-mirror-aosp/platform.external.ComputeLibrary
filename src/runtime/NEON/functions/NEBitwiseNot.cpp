@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,7 +24,8 @@
 #include "arm_compute/runtime/NEON/functions/NEBitwiseNot.h"
 
 #include "src/core/NEON/kernels/NEBitwiseNotKernel.h"
-#include "support/MemorySupport.h"
+
+#include "src/common/utils/Log.h"
 
 #include <utility>
 
@@ -32,7 +33,8 @@ using namespace arm_compute;
 
 void NEBitwiseNot::configure(const ITensor *input, ITensor *output)
 {
-    auto k = arm_compute::support::cpp14::make_unique<NEBitwiseNotKernel>();
+    ARM_COMPUTE_LOG_PARAMS(input, output);
+    auto k = std::make_unique<NEBitwiseNotKernel>();
     k->configure(input, output);
     _kernel = std::move(k);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Arm Limited.
+ * Copyright (c) 2018-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,14 +24,15 @@
 #include "arm_compute/runtime/NEON/functions/NEChannelShuffleLayer.h"
 
 #include "arm_compute/core/Types.h"
+#include "src/common/utils/Log.h"
 #include "src/core/NEON/kernels/NEChannelShuffleLayerKernel.h"
-#include "support/MemorySupport.h"
 
 namespace arm_compute
 {
 void NEChannelShuffleLayer::configure(const ITensor *input, ITensor *output, unsigned int num_groups)
 {
-    auto k = arm_compute::support::cpp14::make_unique<NEChannelShuffleLayerKernel>();
+    ARM_COMPUTE_LOG_PARAMS(input, output, num_groups);
+    auto k = std::make_unique<NEChannelShuffleLayerKernel>();
     k->configure(input, output, num_groups);
     _kernel = std::move(k);
 }
