@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Arm Limited.
+ * Copyright (c) 2017-2021 Arm Limited.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -24,28 +24,28 @@
 #ifndef ARM_COMPUTE_NEPOOLINGLAYER_H
 #define ARM_COMPUTE_NEPOOLINGLAYER_H
 
-#include "arm_compute/runtime/IFunction.h"
-
 #include "arm_compute/core/Types.h"
+#include "arm_compute/runtime/IFunction.h"
+#include "arm_compute/runtime/IMemoryManager.h"
+#include "arm_compute/runtime/MemoryGroup.h"
+
 #include <memory>
 
 namespace arm_compute
 {
+// Forward declarations
 class ITensor;
 class ITensorInfo;
-class NEPoolingLayerKernel;
-class NEFillBorderKernel;
 
-/** Basic function to simulate a pooling layer with the specified pooling operation. This function calls the following NEON kernels:
+/** Basic function to simulate a pooling layer with the specified pooling operation. This function calls the following kernels:
  *
- * -# @ref NEFillBorderKernel (executed if padding size is different from zero)
- * -# @ref NEPoolingLayerKernel
+ * -# @ref cpu::CpuPool2d
  */
 class NEPoolingLayer : public IFunction
 {
 public:
     /** Constructor */
-    NEPoolingLayer();
+    NEPoolingLayer(std::shared_ptr<IMemoryManager> memory_manager = nullptr);
     /** Prevent instances of this class from being copied (As this class contains pointers) */
     NEPoolingLayer(const NEPoolingLayer &) = delete;
     /** Prevent instances of this class from being copied (As this class contains pointers) */
@@ -58,7 +58,21 @@ public:
     ~NEPoolingLayer();
     /** Set the input and output tensors.
      *
+     * Valid data layouts:
+     * - NHWC
+     * - NCHW
+     *
+     * Valid data type configurations:
+     * |src            |dst            |
+     * |:--------------|:--------------|
+     * |QASYMM8        |QASYMM8        |
+     * |QASYMM8_SIGNED |QASYMM8_SIGNED |
+     * |F16            |F16            |
+     * |F32            |F32            |
+     *
      * @note F16 is supported for pool sizes 2 and 3 only
+     * @note Source tensor is padded with -inf for MAX pooling and 0 otherwise
+     *       Cases where pooling region is completely outside input tensor are only supported for floating point data type
      *
      * @param[in, out] input     Source tensor. (Written to only when padding != 0) Data types supported: QASYMM8/QASYMM8_SIGNED/F16/F32.
      * @param[out]     output    Destination tensor. Data types supported: Same as @p input.
@@ -83,10 +97,8 @@ public:
     void run() override;
 
 private:
-    std::unique_ptr<NEPoolingLayerKernel> _pooling_layer_kernel;
-    std::unique_ptr<NEFillBorderKernel>   _border_handler;
-    bool                                  _is_global_pooling_layer;
-    DataLayout                            _data_layout;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
 };
 }
 #endif /* ARM_COMPUTE_NEPOOLINGLAYER_H */
